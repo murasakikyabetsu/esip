@@ -1,0 +1,41 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Express 2013 for Windows Desktop
+VisualStudioVersion = 12.0.30723.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "esip", "esip\esip.vcxproj", "{420C7B7C-DFD2-4703-8DA3-9817FDAD2D6B}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "esipconsole", "esipconsole\esipconsole.vcxproj", "{52210BC3-AE26-49C0-ACE9-670820DF481F}"
+	ProjectSection(ProjectDependencies) = postProject
+		{420C7B7C-DFD2-4703-8DA3-9817FDAD2D6B} = {420C7B7C-DFD2-4703-8DA3-9817FDAD2D6B}
+		{082F4ED2-8E7F-40A5-8636-50AD88473000} = {082F4ED2-8E7F-40A5-8636-50AD88473000}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "esipmisc", "esipmisc\esipmisc.vcxproj", "{082F4ED2-8E7F-40A5-8636-50AD88473000}"
+	ProjectSection(ProjectDependencies) = postProject
+		{420C7B7C-DFD2-4703-8DA3-9817FDAD2D6B} = {420C7B7C-DFD2-4703-8DA3-9817FDAD2D6B}
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{420C7B7C-DFD2-4703-8DA3-9817FDAD2D6B}.Debug|Win32.ActiveCfg = Debug|Win32
+		{420C7B7C-DFD2-4703-8DA3-9817FDAD2D6B}.Debug|Win32.Build.0 = Debug|Win32
+		{420C7B7C-DFD2-4703-8DA3-9817FDAD2D6B}.Release|Win32.ActiveCfg = Release|Win32
+		{420C7B7C-DFD2-4703-8DA3-9817FDAD2D6B}.Release|Win32.Build.0 = Release|Win32
+		{52210BC3-AE26-49C0-ACE9-670820DF481F}.Debug|Win32.ActiveCfg = Debug|Win32
+		{52210BC3-AE26-49C0-ACE9-670820DF481F}.Debug|Win32.Build.0 = Debug|Win32
+		{52210BC3-AE26-49C0-ACE9-670820DF481F}.Release|Win32.ActiveCfg = Release|Win32
+		{52210BC3-AE26-49C0-ACE9-670820DF481F}.Release|Win32.Build.0 = Release|Win32
+		{082F4ED2-8E7F-40A5-8636-50AD88473000}.Debug|Win32.ActiveCfg = Debug|Win32
+		{082F4ED2-8E7F-40A5-8636-50AD88473000}.Debug|Win32.Build.0 = Debug|Win32
+		{082F4ED2-8E7F-40A5-8636-50AD88473000}.Release|Win32.ActiveCfg = Release|Win32
+		{082F4ED2-8E7F-40A5-8636-50AD88473000}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
