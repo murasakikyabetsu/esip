@@ -336,10 +336,13 @@ Value Expression::run(Object *pScope, Object *pThis)
 
 	case ET_NEW:
 		{
+			Value value = m_expressionSets[0]->expression->run(pScope, pThis);
+
 			Object *pObject = Object::create();
-			Value func = m_expressionSets[0]->expression->run(pScope, pThis);
-			call(pScope, pThis, func, m_expressionSets[0].get(), pObject);
-			pObject->setVariable(L"__proto__", func.toObject()->getVariable(L"prototype", true).toObject());
+			call(pScope, pThis, value, m_expressionSets[0].get(), pObject);
+
+			pObject->setVariable(L"__proto__", value.toObject()->getVariable(L"prototype", true).toObject());
+
 			return pObject;
 		}
 	case ET_LEFTHADSIDE:
@@ -842,9 +845,6 @@ std::unique_ptr<Expression> ESInterpreter::parseMemberExpression()
 		{
 			do
 			{
-//				auto pParamExpression = parsePrimaryExpression(TT_IDENTIFIER);
-//				pFunctionExpression->m_arguments.push_back(pParamExpression->m_expressionSets[0]->token.value);
-//				pFunctionExpression->m_pVariableEnvironment->setVariable(pParamExpression->m_expressionSets[0]->token.value.c_str(), Value());
 				pFunctionExpression->m_expressionSets.back()->arguments.push_back(parsePrimaryExpression(TT_IDENTIFIER));
 				pFunctionExpression->m_pVariableEnvironment->setVariable(pFunctionExpression->m_expressionSets.back()->token.value.c_str(), Value());
 			}
