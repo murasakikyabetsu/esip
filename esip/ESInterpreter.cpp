@@ -49,6 +49,34 @@ Value::~Value()
 
 }
 
+Value& Value::operator=(double value)
+{
+	m_type = VT_NUMBER;
+	m_numberValue = value;
+	return *this;
+}
+
+Value& Value::operator=(bool value)
+{
+	m_type = VT_BOOLEAN;
+	m_booleanValue = value;
+	return *this;
+}
+
+Value& Value::operator=(const wchar_t *pValue)
+{
+	m_type = VT_STRING;
+	m_stringValue = pValue;
+	return *this;
+}
+
+Value& Value::operator=(Object *pValue)
+{
+	m_type = VT_OBJECT;
+	m_pObjectValue = pValue;
+	return *this;
+}
+
 double Value::toNumber() const
 {
 	switch (m_type)
@@ -223,7 +251,7 @@ Object& Object::operator = (const Object &obj)
 	return *this;
 }
 
-void Object::setVariable(const wchar_t *pName, Value value)
+void Object::setVariable(const wchar_t *pName, const Value &value)
 {
 	if (m_pSetVariable && m_pSetVariable(pName, value, m_pUserParam))
 		return;
@@ -236,6 +264,9 @@ void Object::setVariable(const wchar_t *pName, Value value)
 Value Object::getVariable(const wchar_t *pName, bool isThis)
 {
 	Value value;
+	value.m_pBase = this;
+	value.m_referenceName = pName;
+
 	if (m_pGetVariable && m_pGetVariable(pName, value, m_pUserParam))
 		return value;
 
@@ -244,13 +275,21 @@ Value Object::getVariable(const wchar_t *pName, bool isThis)
 		return it->second;
 
 	if (isThis)
-		;// todo prototype chain
-	else if (m_pParentScope != nullptr)
+	{
+		it = m_variable.find(L"__proto__");
+		if (it != m_variable.end() && it->second.m_type == Value::VT_OBJECT)
+			value = it->second.toObject()->getVariable(pName, true);
+
+		value.m_pBase = this;
+		value.m_referenceName = pName;
+		return value;
+	}
+
+	if (m_pParentScope != nullptr)
 		return m_pParentScope->getVariable(pName, false);
 
 	value.m_type = Value::VT_INVALID;
-	value.m_pBase = this;
-	value.m_referenceName = pName;
+
 	return value;
 }
 
@@ -297,9 +336,10 @@ Value Expression::run(Object *pScope, Object *pThis)
 
 	case ET_NEW:
 		{
-			// todo new‚µ‚½‚à‚Ì‚ðnew‚µ‚½Žž‚Ì“®ì
 			Object *pObject = Object::create();
-			call(pScope, pThis, m_expressionSets[0]->expression->run(pScope, pThis), m_expressionSets[0].get(), pObject);
+			Value func = m_expressionSets[0]->expression->run(pScope, pThis);
+			call(pScope, pThis, func, m_expressionSets[0].get(), pObject);
+			pObject->setVariable(L"__proto__", func.toObject()->getVariable(L"prototype", true).toObject());
 			return pObject;
 		}
 	case ET_LEFTHADSIDE:
@@ -442,6 +482,7 @@ Value FunctionExpression::run(Object *pScope, Object *pThis)
 	pFunctionObject->m_callable = true;
 	pFunctionObject->m_pFunctionExpression = this;
 	pFunctionObject->m_pParentScope = pScope;
+	pFunctionObject->setVariable(L"prototype", Object::create());	// todo ‚¾‚ß
 
 	return pFunctionObject;
 }

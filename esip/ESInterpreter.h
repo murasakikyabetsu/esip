@@ -80,6 +80,11 @@ public:
 	Value(Object *pValue);
 	virtual ~Value();
 
+	Value& operator=(double value);
+	Value& operator=(bool value);
+	Value& operator=(const wchar_t *pValue);
+	Value& operator=(Object *pValue);
+
 	double toNumber() const;
 	bool toBoolean() const;
 	std::wstring toString() const;
@@ -108,12 +113,12 @@ public:
 
 	std::map<std::wstring, Value> m_variable;
 
-	std::function<Value(Object*, std::vector<Value>&, void*)> m_pNativeFunction;
 	std::function<bool(const wchar_t *pName, const Value &value, void*)> m_pSetVariable;
 	std::function<bool(const wchar_t *pName, Value &value, void*)> m_pGetVariable;
 	std::function<void(void*)> m_pDestroy;
 	void *m_pUserParam;
 
+	std::function<Value(Object*, std::vector<Value>&, void*)> m_pNativeFunction;
 	FunctionExpression *m_pFunctionExpression;
 	bool m_callable;
 
@@ -129,7 +134,7 @@ public:
 
 	virtual ~Object();
 
-	void setVariable(const wchar_t *pName, Value value);
+	void setVariable(const wchar_t *pName, const Value &value);
 	Value getVariable(const wchar_t *pName, bool isThis);
 	void setNativeFunction(const wchar_t *pName, std::function<Value(Object*, std::vector<Value>&, void*)> pNativeFunction, void *pUserParam);
 

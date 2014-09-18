@@ -47,9 +47,7 @@ bool Uint8ArrayAdapter::setVariable(const wchar_t *pName, const Value &value, vo
 	if (::iswdigit(*pName))
 	{
 		long index = ::_wtol(pName);
-
 		pArray->m_pData[index] = (unsigned char)value.toNumber();
-
 		return true;
 	}
 
@@ -69,11 +67,7 @@ bool Uint8ArrayAdapter::getVariable(const wchar_t *pName, Value &value, void *pU
 	if (::iswdigit(*pName))
 	{
 		long index = ::_wtol(pName);
-
 		value = (double)pArray->m_pData[index];
-		value.m_pBase = pArray->m_pObject;
-		value.m_referenceName = pName;
-
 		return true;
 	}
 
