@@ -334,6 +334,20 @@ Value Expression::run(Object *pScope, Object *pThis)
 	case ET_THIS:
 		return pThis;
 
+	case ET_OBJECT:
+		{
+			Object *pObject = Object::create();
+			for (size_t n = 0; n < m_expressionSets.size(); n += 2)
+			{
+				Value rValue = m_expressionSets[n + 1]->expression->run(pScope, pThis);
+				if (m_expressionSets[n]->expression->m_type == ET_IDENTIFIER)
+					pObject->setVariable(m_expressionSets[n]->expression->m_expressionSets[0]->token.value.c_str(), rValue);
+				else
+					pObject->setVariable(m_expressionSets[n]->expression->run(pScope, pThis).toString().c_str(), rValue);
+			}
+			return pObject;
+		}
+
 	case ET_NEW:
 		{
 			Value value = m_expressionSets[0]->expression->run(pScope, pThis);
@@ -825,6 +839,31 @@ std::unique_ptr<Expression> ESInterpreter::parsePrimaryExpression(TOKENTYPE requ
 		auto pExpression = parseExpression();
 		getNextToken(L')', true);
 		
+		return pExpression;
+	}
+	else if (getNextToken(L'{'))
+	{
+		auto pExpression = std::make_unique<Expression>(Expression::ET_OBJECT);
+
+		while (m_token.type != TT_EOF && !getNextToken(L'}'))
+		{
+			pExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
+			pExpression->m_expressionSets.back()->expression = parsePrimaryExpression();
+			if (pExpression->m_expressionSets.back()->expression->m_expressionSets[0]->token.type != TT_NUMBER &&
+				pExpression->m_expressionSets.back()->expression->m_expressionSets[0]->token.type != TT_STRING &&
+				pExpression->m_expressionSets.back()->expression->m_expressionSets[0]->token.type != TT_IDENTIFIER)
+			{
+				throw ESException(ESException::R_SYNTAXERROR, m_token.value.c_str(), m_token.m_line, m_token.m_posInLine);
+			}
+
+			getNextToken(L':', true);
+
+			pExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
+			pExpression->m_expressionSets.back()->expression = parseAssignmentExpression();
+
+			getNextToken(L',');
+		}
+
 		return pExpression;
 	}
 
