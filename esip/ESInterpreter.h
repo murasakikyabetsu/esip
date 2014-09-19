@@ -284,7 +284,8 @@ public:
 
 private:
 
-	Object *m_pRoot;
+	Object *m_pGlobalObject;
+
 	const wchar_t *m_pSourceCode;
 	int m_sourcePos;
 	int m_line;
@@ -322,10 +323,11 @@ private:
 
 public:
 
-	ESInterpreter(Object *pRoot, void (*pCallback)(int, int) = NULL);
+	ESInterpreter(void (*pCallback)(int, int) = NULL);
 	virtual ~ESInterpreter();
 
 	Value run(const wchar_t *pSourceCode);
 
+	Object* getGlobalObject();
 };
 

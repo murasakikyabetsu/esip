@@ -644,8 +644,9 @@ void Statement::run(Object *pScope, Object *pThis)
 
 //////////////////////////////////////
 
-ESInterpreter::ESInterpreter(Object *pRoot, void(*pCallback)(int, int)) : m_pRoot(pRoot), m_pCallback(pCallback), m_pSourceCode(nullptr), m_sourcePos(0), m_line(1), m_posInLine(1)
+ESInterpreter::ESInterpreter(void(*pCallback)(int, int)) : m_pCallback(pCallback), m_pSourceCode(nullptr), m_sourcePos(0), m_line(1), m_posInLine(1)
 {
+	m_pGlobalObject = Object::create();
 }
 
 
@@ -1283,7 +1284,7 @@ std::unique_ptr<Statement> ESInterpreter::parseProgram()
 	try
 	{
 		getNextToken();
-		return parseSourceElements(m_pRoot);
+		return parseSourceElements(m_pGlobalObject);
 	}
 	catch (ESException &e)
 	{
@@ -1304,7 +1305,12 @@ Value ESInterpreter::run(const wchar_t *pSourceCode)
 	m_posInLine = 1;
 
 	m_programs.push_back(parseProgram());
-	m_programs.back()->run(m_pRoot, m_pRoot);
+	m_programs.back()->run(m_pGlobalObject, m_pGlobalObject);
 
 	return m_programs.back()->m_result.value;
+}
+
+Object* ESInterpreter::getGlobalObject()
+{
+	return m_pGlobalObject;
 }

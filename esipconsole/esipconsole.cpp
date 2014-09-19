@@ -30,32 +30,30 @@ std::wstring getReasonText(ESException &e)
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	Object *pRoot = Object::create();
+	ESInterpreter ip;
 
-	pRoot->setNativeFunction(L"print", [](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
+	ip.getGlobalObject()->setNativeFunction(L"print", [](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 	{
 		if (0 < arguments.size())
 			std::wcout << arguments[0].toString() << std::endl;
 		return Value();
 	}, nullptr);
 
-	pRoot->setNativeFunction(L"sleep", [](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
+	ip.getGlobalObject()->setNativeFunction(L"sleep", [](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 	{
 		if (0 < arguments.size())
 			::Sleep((DWORD)arguments[0].toNumber());
 		return Value();
 	}, nullptr);
 
-	pRoot->setNativeFunction(L"pause", [](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
+	ip.getGlobalObject()->setNativeFunction(L"pause", [](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 	{
 		::getchar();
 		return Value();
 	}, nullptr);
 
-	Uint8ArrayAdapter()(pRoot);
-	ESIPImageAdapter()(pRoot);
-
-	ESInterpreter ip(pRoot);
+	Uint8ArrayAdapter()(ip.getGlobalObject());
+	ESIPImageAdapter()(ip.getGlobalObject());
 
 	if (1 < argc)
 	{
