@@ -3,7 +3,8 @@
 #include <string>
 #include <memory>
 #include <vector>
-#include <map>
+#include <list>
+#include <unordered_map>
 #include <functional>
 
 typedef struct tagTOKEN
@@ -78,6 +79,7 @@ public:
 	Value(bool value);
 	Value(const wchar_t *pValue);
 	Value(Object *pValue);
+	Value(const Value &value);
 	virtual ~Value();
 
 	Value& operator=(double value);
@@ -105,13 +107,13 @@ class Object
 {
 public:
 
-	static std::vector<std::unique_ptr<Object>> m_objects;
+	static std::list<std::unique_ptr<Object>> m_objects;
 	static Object* create();
 	static Object* create(std::function<Value(Object*, std::vector<Value>&, void*)> pNativeFunction, void *pUserParam);
 
 public:
 
-	std::map<std::wstring, Value> m_variable;
+	std::unordered_map<std::wstring, Value> m_variable;
 
 	std::function<bool(const wchar_t *pName, const Value &value, void*)> m_pSetVariable;
 	std::function<bool(const wchar_t *pName, Value &value, void*)> m_pGetVariable;

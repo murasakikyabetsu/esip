@@ -44,6 +44,33 @@ Value::Value(Object *pValue) : m_type(VT_OBJECT), m_pObjectValue(pValue), m_pBas
 
 }
 
+Value::Value(const Value &value)
+{
+	m_type = value.m_type;
+	switch (m_type)
+	{
+	case VT_INVALID:
+		break;
+	case VT_UNDEFINED:
+		break;
+	case VT_NUMBER:
+		m_numberValue = value.m_numberValue;
+		break;
+	case VT_BOOLEAN:
+		m_booleanValue = value.m_booleanValue;
+		break;
+	case VT_STRING:
+		m_stringValue = value.m_stringValue;
+		break;
+	case VT_OBJECT:
+		m_pObjectValue = value.m_pObjectValue;
+		break;
+	}
+
+	m_pBase = value.m_pBase;
+	m_referenceName = value.m_referenceName;
+}
+
 Value::~Value()
 {
 
@@ -203,7 +230,7 @@ Value Value::lessThan(const Value &value) const
 
 ///////////////////////////////////////
 
-std::vector<std::unique_ptr<Object>> Object::m_objects;
+std::list<std::unique_ptr<Object>> Object::m_objects;
 
 Object::Object() : m_pNativeFunction(nullptr), m_pFunctionExpression(nullptr), m_pUserParam(nullptr), m_callable(false), m_pParentScope(nullptr)
 {

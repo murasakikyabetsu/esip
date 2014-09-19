@@ -46,6 +46,12 @@ int _tmain(int argc, _TCHAR* argv[])
 		return Value();
 	}, nullptr);
 
+	pRoot->setNativeFunction(L"pause", [](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
+	{
+		::getchar();
+		return Value();
+	}, nullptr);
+
 	Uint8ArrayAdapter()(pRoot);
 	ESIPImageAdapter()(pRoot);
 
