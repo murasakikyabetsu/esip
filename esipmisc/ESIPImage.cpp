@@ -5,6 +5,7 @@ class ESIPImage
 {
 public:
 
+	ESInterpreter *m_pInterpreter;
 	Object *m_pObject;
 
 	long m_width;
@@ -16,7 +17,7 @@ private:
 
 public:
 
-	ESIPImage(Object *pObject) : m_pObject(pObject), m_width(0), m_height(0)
+	ESIPImage(ESInterpreter *pInterpreter, Object *pObject) : m_pInterpreter(pInterpreter), m_pObject(pObject), m_width(0), m_height(0)
 	{
 
 	}
@@ -114,7 +115,7 @@ ESIPImageAdapter::~ESIPImageAdapter()
 {
 }
 
-void ESIPImageAdapter::operator()(Object *pObject)
+void ESIPImageAdapter::operator()(ESInterpreter *pInterpreter, Object *pObject)
 {
 	Object *pESIP = nullptr;
 	Value value = pObject->getVariable(L"ESIP", true);
@@ -124,22 +125,24 @@ void ESIPImageAdapter::operator()(Object *pObject)
 	}
 	else
 	{
-		pESIP = Object::create();
+		pESIP = pInterpreter->createObject();
 		pObject->setVariable(L"ESIP", pESIP);
 	}
 
-	pESIP->setNativeFunction(L"Image", ESIPImageAdapter::constructor, nullptr);
+	pESIP->setVariable(L"Image", pInterpreter->createFunctionObject(ESIPImageAdapter::constructor, pInterpreter));
 }
 
 Value ESIPImageAdapter::constructor(Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 {
-	ESIPImage *pImage = new ESIPImage(pThis);
+	ESInterpreter *pInterpreter = (ESInterpreter*)pUserParam;
+
+	ESIPImage *pImage = new ESIPImage(pInterpreter, pThis);
 	pThis->setCapture(ESIPImageAdapter::setVariable, ESIPImageAdapter::getVariable, ESIPImageAdapter::destroy, pImage);
 
-	pThis->setNativeFunction(L"load", ESIPImageAdapter::load, pImage);
-	pThis->setNativeFunction(L"save", ESIPImageAdapter::save, pImage);
-	pThis->setNativeFunction(L"getPixel", ESIPImageAdapter::getPixel, pImage);
-	pThis->setNativeFunction(L"setPixel", ESIPImageAdapter::setPixel, pImage);
+	pThis->setVariable(L"load", pInterpreter->createFunctionObject(ESIPImageAdapter::load, pImage));
+	pThis->setVariable(L"save", pInterpreter->createFunctionObject(ESIPImageAdapter::save, pImage));
+	pThis->setVariable(L"getPixel", pInterpreter->createFunctionObject(ESIPImageAdapter::getPixel, pImage));
+	pThis->setVariable(L"setPixel", pInterpreter->createFunctionObject(ESIPImageAdapter::setPixel, pImage));
 
 	if (1 <= arguments.size())
 		pImage->load(arguments[0].toString().c_str());
@@ -180,7 +183,7 @@ bool ESIPImageAdapter::getVariable(const wchar_t *pName, Value &value, void *pUs
 
 	if (::wcscmp(pName, L"buffer") == 0)
 	{
-		Object *pObject = Object::create();
+		Object *pObject = pImage->m_pInterpreter->createObject();
 		pObject->m_pUserParam = pImage->get_buffer();
 		pObject->setVariable(L"length", (double)pImage->m_height * pImage->m_width * 3);
 		value = pObject;
@@ -228,7 +231,7 @@ Value ESIPImageAdapter::getPixel(Object *pThis, std::vector<Value> &arguments, v
 		unsigned char r, g, b;
 		pImage->getPixel(x, y, r, g, b);
 
-		Object *pObject = Object::create();
+		Object *pObject = pImage->m_pInterpreter->createObject();
 		pObject->setVariable(L"r", (double)r);
 		pObject->setVariable(L"g", (double)g);
 		pObject->setVariable(L"b", (double)b);

@@ -32,28 +32,28 @@ int _tmain(int argc, _TCHAR* argv[])
 {
 	ESInterpreter ip;
 
-	ip.getGlobalObject()->setNativeFunction(L"print", [](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
+	ip.getGlobalObject()->setVariable(L"print", ip.createFunctionObject([](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 	{
 		if (0 < arguments.size())
 			std::wcout << arguments[0].toString() << std::endl;
 		return Value();
-	}, nullptr);
+	}, nullptr));
 
-	ip.getGlobalObject()->setNativeFunction(L"sleep", [](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
+	ip.getGlobalObject()->setVariable(L"sleep", ip.createFunctionObject([](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 	{
 		if (0 < arguments.size())
 			::Sleep((DWORD)arguments[0].toNumber());
 		return Value();
-	}, nullptr);
+	}, nullptr));
 
-	ip.getGlobalObject()->setNativeFunction(L"pause", [](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
+	ip.getGlobalObject()->setVariable(L"pause", ip.createFunctionObject([](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 	{
 		::getchar();
 		return Value();
-	}, nullptr);
+	}, nullptr));
 
-	Uint8ArrayAdapter()(ip.getGlobalObject());
-	ESIPImageAdapter()(ip.getGlobalObject());
+	Uint8ArrayAdapter()(&ip, ip.getGlobalObject());
+	ESIPImageAdapter()(&ip, ip.getGlobalObject());
 
 	if (1 < argc)
 	{

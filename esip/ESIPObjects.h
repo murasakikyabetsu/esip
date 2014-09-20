@@ -10,7 +10,7 @@ public:
 	Uint8ArrayAdapter();
 	virtual ~Uint8ArrayAdapter();
 
-	void operator()(Object *pObject);
+	void operator()(ESInterpreter *pInterpreter, Object *pObject);
 
 	static Value constructor(Object *pThis, std::vector<Value> &arguments, void *pUserParam);
 

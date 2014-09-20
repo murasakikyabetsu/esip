@@ -109,7 +109,6 @@ public:
 
 	static std::list<std::unique_ptr<Object>> m_objects;
 	static Object* create();
-	static Object* create(std::function<Value(Object*, std::vector<Value>&, void*)> pNativeFunction, void *pUserParam);
 
 public:
 
@@ -124,7 +123,9 @@ public:
 	FunctionExpression *m_pFunctionExpression;
 	bool m_callable;
 
-	Object *m_pParentScope;
+	std::wstring m_class;	// [[Class]] - Object
+	Object *m_pScope;		// [[Scope]] - Function Object
+	Object *m_pPrototype;	// [[Prototype]]
 
 private:
 
@@ -138,10 +139,11 @@ public:
 
 	void setVariable(const wchar_t *pName, const Value &value);
 	Value getVariable(const wchar_t *pName, bool isThis);
-	void setNativeFunction(const wchar_t *pName, std::function<Value(Object*, std::vector<Value>&, void*)> pNativeFunction, void *pUserParam);
 
 	void setCapture(std::function<bool(const wchar_t *pName, const Value &value, void*)> pSetVariable, std::function<bool(const wchar_t *pName, Value &value, void*)> pGetVariable, std::function<void(void*)> pDestroy, void *pUserParam);
 };
+
+class ESInterpreter;
 
 class Expression
 {
@@ -165,6 +167,10 @@ public:
 		ET_ASSIGNMENT,
 	};
 
+protected:
+
+	ESInterpreter *m_pInterpreter;
+
 public:
 
 	EXPRESSIONTYPE m_type;
@@ -179,7 +185,7 @@ public:
 
 public:
 
-	Expression(EXPRESSIONTYPE type);
+	Expression(ESInterpreter *pInterpeter, EXPRESSIONTYPE type);
 	virtual ~Expression();
 
 	virtual Value run(Object *pScope, Object *pThis);
@@ -199,7 +205,7 @@ public:
 
 public:
 
-	FunctionExpression();
+	FunctionExpression(ESInterpreter *pInterpeter);
 	virtual ~FunctionExpression();
 
 	virtual Value run(Object *pScope, Object *pThis);
@@ -229,6 +235,7 @@ public:
 
 private:
 
+	ESInterpreter *m_pInterpreter;
 	STATEMENTTYPE m_type;
 
 	void (*m_pCallback)(int, int);
@@ -248,7 +255,7 @@ public:
 
 public:
 
-	Statement(STATEMENTTYPE type, int line, int posInLine, void(*pCallback)(int,int));
+	Statement(ESInterpreter *pInterpeter, STATEMENTTYPE type, int line, int posInLine, void(*pCallback)(int, int));
 	virtual ~Statement();
 
 	void run(Object *pScope, Object *pThis);
@@ -297,6 +304,9 @@ private:
 
 	std::vector<std::unique_ptr<Statement>> m_programs;
 
+	Object *m_pStandardObject;
+	Object *m_pStandardObjectPrototype;
+
 private:
 
 	bool getNextToken(int type = TT_UNDEFINED, bool exception = false);
@@ -321,6 +331,11 @@ private:
 	std::unique_ptr<Statement> parseSourceElements(Object *pVariableEnvironment);
 	std::unique_ptr<Statement> parseProgram();
 
+	void createStandardObject();
+	// todo createStandardFunctionObject();
+
+	Object* createFunctionObject();
+
 public:
 
 	ESInterpreter(void (*pCallback)(int, int) = NULL);
@@ -329,5 +344,8 @@ public:
 	Value run(const wchar_t *pSourceCode);
 
 	Object* getGlobalObject();
+	Object* createObject();
+	Object* createFunctionObject(std::function<Value(Object*, std::vector<Value>&, void*)> pNativeFunction, void *pUserParam);
+	Object* createFunctionObject(FunctionExpression *pExpression, Object *pScope);
 };
 

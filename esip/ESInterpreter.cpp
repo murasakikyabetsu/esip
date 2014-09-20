@@ -232,7 +232,7 @@ Value Value::lessThan(const Value &value) const
 
 std::list<std::unique_ptr<Object>> Object::m_objects;
 
-Object::Object() : m_pNativeFunction(nullptr), m_pFunctionExpression(nullptr), m_pUserParam(nullptr), m_callable(false), m_pParentScope(nullptr)
+Object::Object() : m_pNativeFunction(nullptr), m_pFunctionExpression(nullptr), m_pUserParam(nullptr), m_callable(false), m_pScope(nullptr), m_pPrototype(nullptr)
 {
 
 }
@@ -251,24 +251,12 @@ Object* Object::create()
 	return Object::m_objects.back().get();
 }
 
-Object* Object::create(std::function<Value(Object*, std::vector<Value>&, void*)> pNativeFunction, void *pUserParam)
-{
-	std::unique_ptr<Object> pObject(new Object());
-	pObject->m_pNativeFunction = pNativeFunction;
-	pObject->m_pUserParam = pUserParam;
-	pObject->m_callable = true;
-
-	Object::m_objects.push_back(std::move(pObject));
-
-	return Object::m_objects.back().get();
-}
-
 Object& Object::operator = (const Object &obj)
 {
 	m_pNativeFunction = obj.m_pNativeFunction;
 	m_pFunctionExpression = obj.m_pFunctionExpression;
 	m_callable = obj.m_callable;
-	m_pParentScope = obj.m_pParentScope;
+	m_pScope = obj.m_pScope;
 
 	for (const auto& v : obj.m_variable)
 	{
@@ -303,26 +291,20 @@ Value Object::getVariable(const wchar_t *pName, bool isThis)
 
 	if (isThis)
 	{
-		it = m_variable.find(L"__proto__");
-		if (it != m_variable.end() && it->second.m_type == Value::VT_OBJECT)
-			value = it->second.toObject()->getVariable(pName, true);
+		if (m_pPrototype != nullptr)
+			value = m_pPrototype->getVariable(pName, true);
 
 		value.m_pBase = this;
 		value.m_referenceName = pName;
 		return value;
 	}
 
-	if (m_pParentScope != nullptr)
-		return m_pParentScope->getVariable(pName, false);
+	if (m_pScope != nullptr)
+		return m_pScope->getVariable(pName, false);
 
 	value.m_type = Value::VT_INVALID;
 
 	return value;
-}
-
-void Object::setNativeFunction(const wchar_t *pName, std::function<Value(Object*, std::vector<Value>&, void*)> pNativeFunction, void *pUserParam)
-{
-	setVariable(pName, Object::create(pNativeFunction, pUserParam));
 }
 
 void Object::setCapture(std::function<bool(const wchar_t *pName, const Value &value, void*)> pSetVariable, std::function<bool(const wchar_t *pName, Value &value, void*)> pGetVariable, std::function<void(void*)> pDestroy, void *pUserParam)
@@ -335,7 +317,7 @@ void Object::setCapture(std::function<bool(const wchar_t *pName, const Value &va
 
 ///////////////////////////////////////
 
-Expression::Expression(EXPRESSIONTYPE type) : m_type(type)
+Expression::Expression(ESInterpreter *pInterpeter, EXPRESSIONTYPE type) : m_pInterpreter(pInterpeter), m_type(type)
 {
 
 }
@@ -363,7 +345,7 @@ Value Expression::run(Object *pScope, Object *pThis)
 
 	case ET_OBJECT:
 		{
-			Object *pObject = Object::create();
+			Object *pObject = m_pInterpreter->createObject();
 			for (size_t n = 0; n < m_expressionSets.size(); n += 2)
 			{
 				Value rValue = m_expressionSets[n + 1]->expression->run(pScope, pThis);
@@ -380,9 +362,9 @@ Value Expression::run(Object *pScope, Object *pThis)
 			Value value = m_expressionSets[0]->expression->run(pScope, pThis);
 
 			Object *pObject = Object::create();
+			pObject->m_class = L"Object";
+			pObject->m_pPrototype = value.toObject()->getVariable(L"prototype", true).toObject();
 			call(pScope, pThis, value, m_expressionSets[0].get(), pObject);
-
-			pObject->setVariable(L"__proto__", value.toObject()->getVariable(L"prototype", true).toObject());
 
 			return pObject;
 		}
@@ -446,11 +428,11 @@ Value Expression::run(Object *pScope, Object *pThis)
 			{
 				switch (m_expressionSets[n]->token.type)
 				{
-				case L'*':	value = value.mul(m_expressionSets[n]->expression->run(pScope, pThis));			break;
-				case L'/':	value = value.div(m_expressionSets[n]->expression->run(pScope, pThis));			break;
-				case L'%':	value = value.mod(m_expressionSets[n]->expression->run(pScope, pThis));			break;
-				case L'+':	value = value.add(m_expressionSets[n]->expression->run(pScope, pThis));			break;
-				case L'-':	value = value.sub(m_expressionSets[n]->expression->run(pScope, pThis));			break;
+				case L'*':	value = value.mul(m_expressionSets[n]->expression->run(pScope, pThis));		break;
+				case L'/':	value = value.div(m_expressionSets[n]->expression->run(pScope, pThis));		break;
+				case L'%':	value = value.mod(m_expressionSets[n]->expression->run(pScope, pThis));		break;
+				case L'+':	value = value.add(m_expressionSets[n]->expression->run(pScope, pThis));		break;
+				case L'-':	value = value.sub(m_expressionSets[n]->expression->run(pScope, pThis));		break;
 				case L'<':	value = value.lessThan(m_expressionSets[n]->expression->run(pScope, pThis));	break;
 				}
 			}
@@ -498,7 +480,7 @@ Value Expression::call(Object *pScope, Object *pThis, Value &func, EXPRESSIONSET
 
 	Object *pNewScope = Object::create();
 	*pNewScope = *pFunctionObject->m_pFunctionExpression->m_pVariableEnvironment;
-	pNewScope->m_pParentScope = pFunctionObject->m_pParentScope;
+	pNewScope->m_pScope = pFunctionObject->m_pScope;
 	for (size_t n = 0; n < pFunctionObject->m_pFunctionExpression->m_expressionSets[0]->arguments.size() && n < arguments.size(); n++)
 	{
 		pNewScope->setVariable(pFunctionObject->m_pFunctionExpression->m_expressionSets[0]->arguments[n]->m_expressionSets[0]->token.value.c_str(), arguments[n]);
@@ -510,7 +492,7 @@ Value Expression::call(Object *pScope, Object *pThis, Value &func, EXPRESSIONSET
 
 ///////////////////////////////////////
 
-FunctionExpression::FunctionExpression() : Expression(ET_FUNCTION), m_pFunctionBody(nullptr)
+FunctionExpression::FunctionExpression(ESInterpreter *pInterpeter) : Expression(pInterpeter, ET_FUNCTION), m_pFunctionBody(nullptr)
 {
 	m_pVariableEnvironment = Object::create();
 }
@@ -522,18 +504,12 @@ FunctionExpression::~FunctionExpression()
 
 Value FunctionExpression::run(Object *pScope, Object *pThis)
 {
-	Object *pFunctionObject = Object::create();
-	pFunctionObject->m_callable = true;
-	pFunctionObject->m_pFunctionExpression = this;
-	pFunctionObject->m_pParentScope = pScope;
-	pFunctionObject->setVariable(L"prototype", Object::create());	// todo ‚¾‚ß
-
-	return pFunctionObject;
+	return m_pInterpreter->createFunctionObject(this, pScope);
 }
 
 ///////////////////////////////////////
 
-Statement::Statement(STATEMENTTYPE type, int line, int posInLine, void(*pCallback)(int, int)) : m_type(type), m_line(line), m_posInLine(posInLine), m_pCallback(pCallback)
+Statement::Statement(ESInterpreter *pInterpeter, STATEMENTTYPE type, int line, int posInLine, void(*pCallback)(int, int)) : m_pInterpreter(pInterpeter), m_type(type), m_line(line), m_posInLine(posInLine), m_pCallback(pCallback)
 {
 
 }
@@ -646,7 +622,11 @@ void Statement::run(Object *pScope, Object *pThis)
 
 ESInterpreter::ESInterpreter(void(*pCallback)(int, int)) : m_pCallback(pCallback), m_pSourceCode(nullptr), m_sourcePos(0), m_line(1), m_posInLine(1)
 {
+	createStandardObject();
+	m_pStandardObjectPrototype = m_pStandardObject->getVariable(L"prototype", true).toObject();
+
 	m_pGlobalObject = Object::create();
+	m_pGlobalObject->setVariable(L"Object", m_pStandardObject);
 }
 
 
@@ -687,7 +667,12 @@ bool ESInterpreter::getNextToken(int type, bool exception)
 		}
 
 		if (m_pSourceCode[m_sourcePos] != L'\0')
+		{
+			m_line++;
+			m_posInLine = 1;
+
 			m_sourcePos++;
+		}
 
 		return getNextToken();
 	}
@@ -695,11 +680,23 @@ bool ESInterpreter::getNextToken(int type, bool exception)
 	{
 		while (m_pSourceCode[m_sourcePos] != L'\0' && (m_pSourceCode[m_sourcePos] != L'*' || m_pSourceCode[m_sourcePos + 1] != L'/'))
 		{
+			if (m_pSourceCode[m_sourcePos] == L'\n')
+			{
+				m_line++;
+				m_posInLine = 1;
+			}
+			else
+				m_posInLine++;
+
 			m_sourcePos++;
 		}
 
 		if (m_pSourceCode[m_sourcePos] != L'\0')
+		{
+			m_posInLine += 2;
+
 			m_sourcePos += 2;
+		}
 
 		return getNextToken();
 	}
@@ -833,7 +830,7 @@ std::unique_ptr<Expression> ESInterpreter::parsePrimaryExpression(TOKENTYPE requ
 
 	if (m_token.type == TT_NUMBER)
 	{
-		auto pExpression = std::make_unique<Expression>(Expression::ET_NUMBER);
+		auto pExpression = std::make_unique<Expression>(this, Expression::ET_NUMBER);
 		pExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 		pExpression->m_expressionSets.back()->token = m_token;
 		getNextToken();
@@ -842,7 +839,7 @@ std::unique_ptr<Expression> ESInterpreter::parsePrimaryExpression(TOKENTYPE requ
 	}
 	else if (m_token.type == TT_STRING)
 	{
-		auto pExpression = std::make_unique<Expression>(Expression::ET_STRING);
+		auto pExpression = std::make_unique<Expression>(this, Expression::ET_STRING);
 		pExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 		pExpression->m_expressionSets.back()->token = m_token;
 		getNextToken();
@@ -851,7 +848,7 @@ std::unique_ptr<Expression> ESInterpreter::parsePrimaryExpression(TOKENTYPE requ
 	}
 	else if (m_token.type == TT_IDENTIFIER)
 	{
-		auto pExpression = std::make_unique<Expression>(Expression::ET_IDENTIFIER);
+		auto pExpression = std::make_unique<Expression>(this, Expression::ET_IDENTIFIER);
 		pExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 		pExpression->m_expressionSets.back()->token = m_token;
 		getNextToken();
@@ -860,7 +857,7 @@ std::unique_ptr<Expression> ESInterpreter::parsePrimaryExpression(TOKENTYPE requ
 	}
 	else if (getNextToken(TT_THIS))
 	{
-		return std::make_unique<Expression>(Expression::ET_THIS);
+		return std::make_unique<Expression>(this, Expression::ET_THIS);
 	}
 	else if (getNextToken(L'('))
 	{
@@ -871,7 +868,7 @@ std::unique_ptr<Expression> ESInterpreter::parsePrimaryExpression(TOKENTYPE requ
 	}
 	else if (getNextToken(L'{'))
 	{
-		auto pExpression = std::make_unique<Expression>(Expression::ET_OBJECT);
+		auto pExpression = std::make_unique<Expression>(this, Expression::ET_OBJECT);
 
 		while (m_token.type != TT_EOF && !getNextToken(L'}'))
 		{
@@ -904,7 +901,7 @@ std::unique_ptr<Expression> ESInterpreter::parseMemberExpression()
 
 	if (getNextToken(TT_FUNCTION))
 	{
-		auto pFunctionExpression = std::make_unique<FunctionExpression>();
+		auto pFunctionExpression = std::make_unique<FunctionExpression>(this);
 		pFunctionExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 
 		getNextToken(L'(', true);
@@ -927,7 +924,7 @@ std::unique_ptr<Expression> ESInterpreter::parseMemberExpression()
 	}
 	else if (getNextToken(TT_NEW))
 	{
-		pExpression = std::make_unique<Expression>(Expression::ET_NEW);
+		pExpression = std::make_unique<Expression>(this, Expression::ET_NEW);
 
 		pExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 		pExpression->m_expressionSets.back()->expression = parseMemberExpression();
@@ -953,7 +950,7 @@ std::unique_ptr<Expression> ESInterpreter::parseMemberExpression()
 	if (m_token.type != L'.' && m_token.type != L'(' && m_token.type != L'[')
 		return pExpression;
 
-	auto pNewExpression = std::make_unique<Expression>(Expression::ET_LEFTHADSIDE);
+	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_LEFTHADSIDE);
 	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
 
@@ -993,7 +990,7 @@ std::unique_ptr<Expression> ESInterpreter::parseLeftHandSideExpression()
 	}
 	else
 	{
-		pNewExpression = std::move(std::make_unique<Expression>(Expression::ET_LEFTHADSIDE));
+		pNewExpression = std::move(std::make_unique<Expression>(this, Expression::ET_LEFTHADSIDE));
 		pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 		pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
 	}
@@ -1035,7 +1032,7 @@ std::unique_ptr<Expression> ESInterpreter::parsePostfixExpression()
 	if (m_token.type != TT_MINUSMINUS && m_token.type != TT_PLUSPLUS)
 		return pExpression;
 
-	auto pNewExpression = std::make_unique<Expression>(Expression::ET_POSTFIX);
+	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_POSTFIX);
 
 	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
@@ -1049,7 +1046,7 @@ std::unique_ptr<Expression> ESInterpreter::parseUnaryExpression()
 {
 	if (m_token.type == L'-' || m_token.type == L'!')
 	{
-		auto pExpression = std::make_unique<Expression>(Expression::ET_UNARY);
+		auto pExpression = std::make_unique<Expression>(this, Expression::ET_UNARY);
 
 		pExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 		pExpression->m_expressionSets.back()->token = m_token;
@@ -1069,7 +1066,7 @@ std::unique_ptr<Expression> ESInterpreter::parseMultiplicativeExpression()
 	if (m_token.type != L'*' && m_token.type != L'/' && m_token.type != L'%')
 		return pExpression;
 
-	auto pNewExpression = std::make_unique<Expression>(Expression::ET_MULTIPLICATIVE);
+	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_MULTIPLICATIVE);
 	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
 
@@ -1091,7 +1088,7 @@ std::unique_ptr<Expression> ESInterpreter::parseAdditiveExpression()
 	if (m_token.type != L'+' && m_token.type != L'-')
 		return pExpression;
 
-	auto pNewExpression = std::make_unique<Expression>(Expression::ET_ADDITIVE);
+	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_ADDITIVE);
 
 	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
@@ -1119,7 +1116,7 @@ std::unique_ptr<Expression> ESInterpreter::parseRelationalExpression()
 	if (m_token.type != L'<')
 		return pExpression;
 
-	auto pNewExpression = std::make_unique<Expression>(Expression::ET_RELATIONAL);
+	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_RELATIONAL);
 
 	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
@@ -1161,7 +1158,7 @@ std::unique_ptr<Expression> ESInterpreter::parseAssignmentExpression()
 	if (Expression::ET_LEFTHADSIDE < pExpression->m_type || (m_token.type != L'=' && m_token.type != TT_PLUSEQUAL))
 		return pExpression;
 
-	auto pNewExpression = std::make_unique<Expression>(Expression::ET_ASSIGNMENT);
+	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_ASSIGNMENT);
 
 	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
@@ -1185,7 +1182,7 @@ std::unique_ptr<Statement> ESInterpreter::parseStatement(Object *pVariableEnviro
 	{
 		if (getNextToken(L'{'))
 		{
-			auto pStatement = std::make_unique<Statement>(Statement::ST_BLOCK, m_line, m_posInLine, m_pCallback);
+			auto pStatement = std::make_unique<Statement>(this, Statement::ST_BLOCK, m_line, m_posInLine, m_pCallback);
 			while (m_token.type != TT_EOF && m_token.type != L'}')
 			{
 				pStatement->m_statements.push_back(parseStatement(pVariableEnvironment));
@@ -1196,7 +1193,7 @@ std::unique_ptr<Statement> ESInterpreter::parseStatement(Object *pVariableEnviro
 		}
 		else if (getNextToken(TT_VAR))
 		{
-			auto pStatement = std::make_unique<Statement>(Statement::ST_VAR, m_line, m_posInLine, m_pCallback);
+			auto pStatement = std::make_unique<Statement>(this, Statement::ST_VAR, m_line, m_posInLine, m_pCallback);
 
 			do
 			{
@@ -1217,7 +1214,7 @@ std::unique_ptr<Statement> ESInterpreter::parseStatement(Object *pVariableEnviro
 		}
 		else if (getNextToken(TT_FOR))
 		{
-			auto pStatement = std::make_unique<Statement>(Statement::ST_FOR, m_line, m_posInLine, m_pCallback);
+			auto pStatement = std::make_unique<Statement>(this, Statement::ST_FOR, m_line, m_posInLine, m_pCallback);
 
 			getNextToken(L'(', true);
 			pStatement->m_expressions.push_back(m_token.type == L';' ? nullptr : parseExpression());
@@ -1234,11 +1231,11 @@ std::unique_ptr<Statement> ESInterpreter::parseStatement(Object *pVariableEnviro
 		else if (getNextToken(TT_BREAK))
 		{
 			getNextToken(L';');
-			return std::make_unique<Statement>(Statement::ST_BREAK, m_line, m_posInLine, m_pCallback);
+			return std::make_unique<Statement>(this, Statement::ST_BREAK, m_line, m_posInLine, m_pCallback);
 		}
 		else if (getNextToken(TT_IF))
 		{
-			auto pStatement = std::make_unique<Statement>(Statement::ST_IF, m_line, m_posInLine, m_pCallback);
+			auto pStatement = std::make_unique<Statement>(this, Statement::ST_IF, m_line, m_posInLine, m_pCallback);
 
 			getNextToken(L'(', true);
 			pStatement->m_expressions.push_back(parseExpression());
@@ -1252,7 +1249,7 @@ std::unique_ptr<Statement> ESInterpreter::parseStatement(Object *pVariableEnviro
 			return pStatement;
 		}
 
-		auto pStatement = std::make_unique<Statement>(Statement::ST_EXPRESSION, m_line, m_posInLine, m_pCallback);
+		auto pStatement = std::make_unique<Statement>(this, Statement::ST_EXPRESSION, m_line, m_posInLine, m_pCallback);
 		pStatement->m_expressions.push_back(parseExpression());
 		getNextToken(L';');
 
@@ -1271,7 +1268,7 @@ std::unique_ptr<Statement> ESInterpreter::parseStatement(Object *pVariableEnviro
 
 std::unique_ptr<Statement> ESInterpreter::parseSourceElements(Object *pVariableEnvironment)
 {
-	auto pStatement = std::make_unique<Statement>(Statement::ST_SOURCEELEMENT, m_line, m_posInLine, m_pCallback);
+	auto pStatement = std::make_unique<Statement>(this, Statement::ST_SOURCEELEMENT, m_line, m_posInLine, m_pCallback);
 	while (m_token.type != TT_EOF && m_token.type != L'}')
 	{
 		pStatement->m_statements.push_back(parseStatement(pVariableEnvironment));
@@ -1313,4 +1310,58 @@ Value ESInterpreter::run(const wchar_t *pSourceCode)
 Object* ESInterpreter::getGlobalObject()
 {
 	return m_pGlobalObject;
+}
+
+void ESInterpreter::createStandardObject()
+{
+	m_pStandardObject = Object::create();
+	m_pStandardObject->m_pNativeFunction = [](Object *pThis, std::vector<Value>&, void*)
+	{
+		// todo
+		return Value();
+	};
+	m_pStandardObject->m_callable = true;
+	m_pStandardObject->m_class = L"Object";
+
+	m_pStandardObjectPrototype = Object::create();
+	m_pStandardObject->setVariable(L"prototype", m_pStandardObjectPrototype);
+
+	m_pStandardObjectPrototype->setVariable(L"toString", createFunctionObject([](Object *pThis, std::vector<Value>&, void*)
+	{
+		return Value((L"[object " + pThis->m_class + L"]").c_str());
+	}, nullptr));
+}
+
+Object* ESInterpreter::createObject()
+{
+	Object *pObject = Object::create();
+	pObject->m_class = L"Object";
+	pObject->m_pPrototype = m_pStandardObjectPrototype;
+	return pObject;
+}
+
+Object* ESInterpreter::createFunctionObject()
+{
+	Object *pObject = Object::create();
+	pObject->m_class = L"Function";
+	pObject->m_callable = true;
+	pObject->m_pPrototype = m_pStandardObjectPrototype;	// todo standard function object;
+	pObject->setVariable(L"prototype", Object::create());
+	return pObject;
+}
+
+Object* ESInterpreter::createFunctionObject(std::function<Value(Object*, std::vector<Value>&, void*)> pNativeFunction, void *pUserParam)
+{
+	Object *pObject = createFunctionObject();
+	pObject->m_pNativeFunction = pNativeFunction;
+	pObject->m_pUserParam = pUserParam;
+	return pObject;
+}
+
+Object* ESInterpreter::createFunctionObject(FunctionExpression *pExpression, Object *pScope)
+{
+	Object *pObject = createFunctionObject();
+	pObject->m_pFunctionExpression = pExpression;
+	pObject->m_pScope = pScope;
+	return pObject;
 }

@@ -4,6 +4,10 @@
 
 class Uint8Array
 {
+private:
+
+	ESInterpreter *m_pInterpreter;
+
 public:
 
 	Object *m_pObject;
@@ -13,7 +17,7 @@ public:
 
 public:
 
-	Uint8Array(Object *pObject, unsigned char *pData, long size) : m_pObject(pObject), m_pData(pData), m_size(size) {}
+	Uint8Array(ESInterpreter *pInterpreter, Object *pObject, unsigned char *pData, long size) : m_pInterpreter(pInterpreter), m_pObject(pObject), m_pData(pData), m_size(size) {}
 	virtual ~Uint8Array() {}
 
 };
@@ -27,14 +31,18 @@ Uint8ArrayAdapter::~Uint8ArrayAdapter()
 {
 }
 
-void Uint8ArrayAdapter::operator()(Object *pObject)
+void Uint8ArrayAdapter::operator()(ESInterpreter *pInterpreter, Object *pObject)
 {
-	pObject->setNativeFunction(L"Uint8Array", Uint8ArrayAdapter::constructor, nullptr);
+	pObject->setVariable(L"Uint8Array", pInterpreter->createFunctionObject(Uint8ArrayAdapter::constructor, pInterpreter));
 }
 
 Value Uint8ArrayAdapter::constructor(Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 {
-	Uint8Array *pArray = new Uint8Array(pThis, static_cast<unsigned char*>(arguments[0].toObject()->m_pUserParam), (long)arguments[0].toObject()->getVariable(L"length", true).toNumber());
+	Uint8Array *pArray = new Uint8Array(
+		(ESInterpreter*)pUserParam,
+		pThis,
+		static_cast<unsigned char*>(arguments[0].toObject()->m_pUserParam),
+		(long)arguments[0].toObject()->getVariable(L"length", true).toNumber());
 	pThis->setCapture(Uint8ArrayAdapter::setVariable, Uint8ArrayAdapter::getVariable, Uint8ArrayAdapter::destroy, pArray);
 
 	return Value();

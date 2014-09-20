@@ -10,7 +10,7 @@ public:
 	ESIPImageAdapter();
 	virtual ~ESIPImageAdapter();
 
-	void operator()(Object *pObject);
+	void operator()(ESInterpreter *pInterpreter, Object *pObject);
 
 	static Value constructor(Object *pThis, std::vector<Value> &arguments, void *pUserParam);
 	static bool setVariable(const wchar_t *pName, const Value &value, void *pUserParam);
