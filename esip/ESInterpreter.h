@@ -110,22 +110,24 @@ public:
 	static std::list<std::unique_ptr<Object>> m_objects;
 	static Object* create();
 
-public:
-
-	std::unordered_map<std::wstring, Value> m_variable;
+private:
 
 	std::function<bool(const wchar_t *pName, const Value &value, void*)> m_pSetVariable;
 	std::function<bool(const wchar_t *pName, Value &value, void*)> m_pGetVariable;
 	std::function<void(void*)> m_pDestroy;
+
+public:
+
+	std::unordered_map<std::wstring, Value> m_variable;
+
 	void *m_pUserParam;
 
-	std::function<Value(Object*, std::vector<Value>&, void*)> m_pNativeFunction;
-	FunctionExpression *m_pFunctionExpression;
-	bool m_callable;
-
 	std::wstring m_class;	// [[Class]] - Object
-	Object *m_pScope;		// [[Scope]] - Function Object
-	Object *m_pPrototype;	// [[Prototype]]
+	Object *m_pPrototype;	// [[Prototype]] - Object
+
+	std::function<Value(Object*, std::vector<Value>&, void*)> m_pNativeFunction;
+	FunctionExpression *m_pFunctionBody;											// [[Code]] - Function Object
+	Object *m_pScope;																// [[Scope]] - Function Object
 
 private:
 
@@ -136,6 +138,11 @@ public:
 	Object& operator=(const Object &obj);
 
 	virtual ~Object();
+
+	bool isCallable();
+
+	Value call(Object *pThis, std::vector<Value> &arguments);	// [[Call]] - Function Object
+	Value construct(std::vector<Value> &arguments);				// [[Construct]] - Function Object
 
 	void setVariable(const wchar_t *pName, const Value &value);
 	Value getVariable(const wchar_t *pName, bool isThis);
@@ -307,6 +314,9 @@ private:
 	Object *m_pStandardObject;
 	Object *m_pStandardObjectPrototype;
 
+	Object *m_pStandardFunctionObject;
+	Object *m_pStandardFunctionObjectPrototype;
+
 private:
 
 	bool getNextToken(int type = TT_UNDEFINED, bool exception = false);
@@ -332,7 +342,7 @@ private:
 	std::unique_ptr<Statement> parseProgram();
 
 	void createStandardObject();
-	// todo createStandardFunctionObject();
+	void createStandardFunctionObject();
 
 	Object* createFunctionObject();
 

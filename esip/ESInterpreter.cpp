@@ -232,7 +232,7 @@ Value Value::lessThan(const Value &value) const
 
 std::list<std::unique_ptr<Object>> Object::m_objects;
 
-Object::Object() : m_pNativeFunction(nullptr), m_pFunctionExpression(nullptr), m_pUserParam(nullptr), m_callable(false), m_pScope(nullptr), m_pPrototype(nullptr)
+Object::Object() : m_pNativeFunction(nullptr), m_pFunctionBody(nullptr), m_pUserParam(nullptr), m_pScope(nullptr), m_pPrototype(nullptr)
 {
 
 }
@@ -254,8 +254,7 @@ Object* Object::create()
 Object& Object::operator = (const Object &obj)
 {
 	m_pNativeFunction = obj.m_pNativeFunction;
-	m_pFunctionExpression = obj.m_pFunctionExpression;
-	m_callable = obj.m_callable;
+	m_pFunctionBody = obj.m_pFunctionBody;
 	m_pScope = obj.m_pScope;
 
 	for (const auto& v : obj.m_variable)
@@ -264,6 +263,41 @@ Object& Object::operator = (const Object &obj)
 	}
 
 	return *this;
+}
+
+bool Object::isCallable()
+{
+	return m_pNativeFunction || m_pFunctionBody;
+}
+
+Value Object::call(Object *pThis, std::vector<Value> &arguments)
+{
+	if (m_pNativeFunction)
+		return m_pNativeFunction(pThis, arguments, m_pUserParam);
+
+	// todo argumentsオブジェクト
+
+	Object *pNewScope = Object::create();
+	*pNewScope = *m_pFunctionBody->m_pVariableEnvironment;
+	pNewScope->m_pScope = m_pScope;
+	for (size_t n = 0; n < m_pFunctionBody->m_expressionSets[0]->arguments.size() && n < arguments.size(); n++)
+	{
+		pNewScope->setVariable(m_pFunctionBody->m_expressionSets[0]->arguments[n]->m_expressionSets[0]->token.value.c_str(), arguments[n]);
+	}
+
+	m_pFunctionBody->m_pFunctionBody->run(pNewScope, pThis);
+	return m_pFunctionBody->m_pFunctionBody->m_result.value;
+}
+
+Value Object::construct(std::vector<Value> &arguments)
+{
+	Object *pObject = Object::create();
+	pObject->m_class = L"Object";
+	pObject->m_pPrototype = getVariable(L"prototype", true).toObject();
+
+	Value value = call(pObject, arguments);
+
+	return value.m_type == Value::VT_OBJECT ? value : pObject;
 }
 
 void Object::setVariable(const wchar_t *pName, const Value &value)
@@ -361,13 +395,18 @@ Value Expression::run(Object *pScope, Object *pThis)
 		{
 			Value value = m_expressionSets[0]->expression->run(pScope, pThis);
 
-			Object *pObject = Object::create();
-			pObject->m_class = L"Object";
-			pObject->m_pPrototype = value.toObject()->getVariable(L"prototype", true).toObject();
-			call(pScope, pThis, value, m_expressionSets[0].get(), pObject);
+			Object *pFunctionObject = value.toObject();
+			if (pFunctionObject == nullptr || !pFunctionObject->isCallable())
+				throw ESException(ESException::R_TYPEERROR, value.m_referenceName.c_str());
 
-			return pObject;
-		}
+			std::vector<Value> arguments;
+			for (size_t n = 0; n < m_expressionSets[0]->arguments.size(); n++)
+			{
+				arguments.push_back(m_expressionSets[0]->arguments[n]->run(pScope, pThis));
+			}
+
+			return pFunctionObject->construct(arguments);
+	}
 	case ET_LEFTHADSIDE:
 		{
 			Value value = m_expressionSets[0]->expression->run(pScope, pThis);
@@ -389,7 +428,17 @@ Value Expression::run(Object *pScope, Object *pThis)
 				}
 				else if (m_expressionSets[n]->token.type == L'(')
 				{
-					value = call(pScope, pThis, value, m_expressionSets[n].get(), pThis);
+					Object *pFunctionObject = value.toObject();
+					if (pFunctionObject == nullptr || !pFunctionObject->isCallable())
+						throw ESException(ESException::R_TYPEERROR, value.m_referenceName.c_str());
+
+					std::vector<Value> arguments;
+					for (size_t a = 0; a < m_expressionSets[n]->arguments.size(); a++)
+					{
+						arguments.push_back(m_expressionSets[n]->arguments[a]->run(pScope, pThis));
+					}
+
+					value = pFunctionObject->call(pThis, arguments);
 				}
 
 				pThis = pNewThis;
@@ -428,11 +477,11 @@ Value Expression::run(Object *pScope, Object *pThis)
 			{
 				switch (m_expressionSets[n]->token.type)
 				{
-				case L'*':	value = value.mul(m_expressionSets[n]->expression->run(pScope, pThis));		break;
-				case L'/':	value = value.div(m_expressionSets[n]->expression->run(pScope, pThis));		break;
-				case L'%':	value = value.mod(m_expressionSets[n]->expression->run(pScope, pThis));		break;
-				case L'+':	value = value.add(m_expressionSets[n]->expression->run(pScope, pThis));		break;
-				case L'-':	value = value.sub(m_expressionSets[n]->expression->run(pScope, pThis));		break;
+				case L'*':	value = value.mul(m_expressionSets[n]->expression->run(pScope, pThis));			break;
+				case L'/':	value = value.div(m_expressionSets[n]->expression->run(pScope, pThis));			break;
+				case L'%':	value = value.mod(m_expressionSets[n]->expression->run(pScope, pThis));			break;
+				case L'+':	value = value.add(m_expressionSets[n]->expression->run(pScope, pThis));			break;
+				case L'-':	value = value.sub(m_expressionSets[n]->expression->run(pScope, pThis));			break;
 				case L'<':	value = value.lessThan(m_expressionSets[n]->expression->run(pScope, pThis));	break;
 				}
 			}
@@ -464,7 +513,7 @@ Value Expression::run(Object *pScope, Object *pThis)
 Value Expression::call(Object *pScope, Object *pThis, Value &func, EXPRESSIONSET *pSet, Object *pNewThis)
 {
 	Object *pFunctionObject = func.toObject();
-	if (pFunctionObject == nullptr || !pFunctionObject->m_callable)
+	if (pFunctionObject == nullptr || !pFunctionObject->isCallable())
 		throw ESException(ESException::R_TYPEERROR, func.m_referenceName.c_str());
 
 	std::vector<Value> arguments;
@@ -479,15 +528,15 @@ Value Expression::call(Object *pScope, Object *pThis, Value &func, EXPRESSIONSET
 	// todo argumentsオブジェクト
 
 	Object *pNewScope = Object::create();
-	*pNewScope = *pFunctionObject->m_pFunctionExpression->m_pVariableEnvironment;
+	*pNewScope = *pFunctionObject->m_pFunctionBody->m_pVariableEnvironment;
 	pNewScope->m_pScope = pFunctionObject->m_pScope;
-	for (size_t n = 0; n < pFunctionObject->m_pFunctionExpression->m_expressionSets[0]->arguments.size() && n < arguments.size(); n++)
+	for (size_t n = 0; n < pFunctionObject->m_pFunctionBody->m_expressionSets[0]->arguments.size() && n < arguments.size(); n++)
 	{
-		pNewScope->setVariable(pFunctionObject->m_pFunctionExpression->m_expressionSets[0]->arguments[n]->m_expressionSets[0]->token.value.c_str(), arguments[n]);
+		pNewScope->setVariable(pFunctionObject->m_pFunctionBody->m_expressionSets[0]->arguments[n]->m_expressionSets[0]->token.value.c_str(), arguments[n]);
 	}
 
-	pFunctionObject->m_pFunctionExpression->m_pFunctionBody->run(pNewScope, pNewThis);
-	return pFunctionObject->m_pFunctionExpression->m_pFunctionBody->m_result.value;
+	pFunctionObject->m_pFunctionBody->m_pFunctionBody->run(pNewScope, pNewThis);
+	return pFunctionObject->m_pFunctionBody->m_pFunctionBody->m_result.value;
 }
 
 ///////////////////////////////////////
@@ -620,13 +669,17 @@ void Statement::run(Object *pScope, Object *pThis)
 
 //////////////////////////////////////
 
-ESInterpreter::ESInterpreter(void(*pCallback)(int, int)) : m_pCallback(pCallback), m_pSourceCode(nullptr), m_sourcePos(0), m_line(1), m_posInLine(1)
+ESInterpreter::ESInterpreter(void(*pCallback)(int, int))
+	: m_pCallback(pCallback), m_pSourceCode(nullptr), m_sourcePos(0), m_line(1), m_posInLine(1)
+	, m_pStandardObject(nullptr), m_pStandardObjectPrototype(nullptr)
+	, m_pStandardFunctionObject(nullptr), m_pStandardFunctionObjectPrototype(nullptr)
 {
 	createStandardObject();
-	m_pStandardObjectPrototype = m_pStandardObject->getVariable(L"prototype", true).toObject();
+	createStandardFunctionObject();
 
 	m_pGlobalObject = Object::create();
 	m_pGlobalObject->setVariable(L"Object", m_pStandardObject);
+	m_pGlobalObject->setVariable(L"Function", m_pStandardFunctionObject);
 }
 
 
@@ -1320,16 +1373,30 @@ void ESInterpreter::createStandardObject()
 		// todo
 		return Value();
 	};
-	m_pStandardObject->m_callable = true;
 	m_pStandardObject->m_class = L"Object";
 
-	m_pStandardObjectPrototype = Object::create();
+	m_pStandardObjectPrototype = createObject();
 	m_pStandardObject->setVariable(L"prototype", m_pStandardObjectPrototype);
 
 	m_pStandardObjectPrototype->setVariable(L"toString", createFunctionObject([](Object *pThis, std::vector<Value>&, void*)
 	{
 		return Value((L"[object " + pThis->m_class + L"]").c_str());
 	}, nullptr));
+}
+
+void ESInterpreter::createStandardFunctionObject()
+{
+	m_pStandardFunctionObject = Object::create();
+	m_pStandardFunctionObject->m_pNativeFunction = [](Object *pThis, std::vector<Value>&, void*)
+	{
+		// todo
+		return Value();
+	};
+	m_pStandardFunctionObject->m_class = L"Function";
+	m_pStandardFunctionObject->m_pPrototype = m_pStandardObjectPrototype;
+
+	m_pStandardFunctionObjectPrototype = createObject();
+	m_pStandardFunctionObject->setVariable(L"prototype", m_pStandardFunctionObjectPrototype);
 }
 
 Object* ESInterpreter::createObject()
@@ -1344,9 +1411,8 @@ Object* ESInterpreter::createFunctionObject()
 {
 	Object *pObject = Object::create();
 	pObject->m_class = L"Function";
-	pObject->m_callable = true;
-	pObject->m_pPrototype = m_pStandardObjectPrototype;	// todo standard function object;
-	pObject->setVariable(L"prototype", Object::create());
+	pObject->m_pPrototype = m_pStandardFunctionObjectPrototype;
+	pObject->setVariable(L"prototype", createObject());
 	return pObject;
 }
 
@@ -1361,7 +1427,7 @@ Object* ESInterpreter::createFunctionObject(std::function<Value(Object*, std::ve
 Object* ESInterpreter::createFunctionObject(FunctionExpression *pExpression, Object *pScope)
 {
 	Object *pObject = createFunctionObject();
-	pObject->m_pFunctionExpression = pExpression;
+	pObject->m_pFunctionBody = pExpression;
 	pObject->m_pScope = pScope;
 	return pObject;
 }
