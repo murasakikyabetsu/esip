@@ -92,6 +92,8 @@ public:
 	std::wstring toString() const;
 	Object* toObject() const;
 
+	bool isCallable() const;
+
 	Value add(const Value &value) const;
 	Value sub(const Value &value) const;
 	Value mul(const Value &value) const;
@@ -138,8 +140,6 @@ public:
 	Object& operator=(const Object &obj);
 
 	virtual ~Object();
-
-	bool isCallable();
 
 	Value call(Object *pThis, std::vector<Value> &arguments);	// [[Call]] - Function Object
 	Value construct(std::vector<Value> &arguments);				// [[Construct]] - Function Object
@@ -196,7 +196,6 @@ public:
 	virtual ~Expression();
 
 	virtual Value run(Object *pScope, Object *pThis);
-	virtual Value call(Object *pScope, Object *pThis, Value &func, EXPRESSIONSET *pSet, Object *pNewThis);
 
 };
 

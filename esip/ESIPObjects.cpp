@@ -38,11 +38,9 @@ void Uint8ArrayAdapter::operator()(ESInterpreter *pInterpreter, Object *pObject)
 
 Value Uint8ArrayAdapter::constructor(Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 {
-	Uint8Array *pArray = new Uint8Array(
-		(ESInterpreter*)pUserParam,
-		pThis,
-		static_cast<unsigned char*>(arguments[0].toObject()->m_pUserParam),
-		(long)arguments[0].toObject()->getVariable(L"length", true).toNumber());
+	unsigned char *pBuffer = static_cast<unsigned char*>(arguments[0].toObject()->m_pUserParam);
+	long bufferSize = (long)arguments[0].toObject()->getVariable(L"length", true).toNumber();
+	Uint8Array *pArray = new Uint8Array((ESInterpreter*)pUserParam, pThis, pBuffer, bufferSize);
 	pThis->setCapture(Uint8ArrayAdapter::setVariable, Uint8ArrayAdapter::getVariable, Uint8ArrayAdapter::destroy, pArray);
 
 	return Value();
