@@ -9,6 +9,7 @@
 #include "..\esip\ESInterpreter.h"
 #include "..\esip\ESIPObjects.h"
 #include "..\esipmisc\ESIPImage.h"
+#include "Console.h"
 
 #include <Windows.h>
 
@@ -32,28 +33,9 @@ int _tmain(int argc, _TCHAR* argv[])
 {
 	ESInterpreter ip;
 
-	ip.getGlobalObject()->setVariable(L"print", ip.createFunctionObject([](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
-	{
-		if (0 < arguments.size())
-			std::wcout << arguments[0].toString() << std::endl;
-		return Value();
-	}, nullptr));
-
-	ip.getGlobalObject()->setVariable(L"sleep", ip.createFunctionObject([](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
-	{
-		if (0 < arguments.size())
-			::Sleep((DWORD)arguments[0].toNumber());
-		return Value();
-	}, nullptr));
-
-	ip.getGlobalObject()->setVariable(L"pause", ip.createFunctionObject([](Object *pThis, std::vector<Value> &arguments, void *pUserParam)
-	{
-		::getchar();
-		return Value();
-	}, nullptr));
-
 	Uint8ArrayAdapter()(&ip, ip.getGlobalObject());
 	ESIPImageAdapter()(&ip, ip.getGlobalObject());
+	ConsoleAdapter()(&ip, ip.getGlobalObject());
 
 	if (1 < argc)
 	{
@@ -77,6 +59,11 @@ int _tmain(int argc, _TCHAR* argv[])
 			catch (ESException &e)
 			{
 				std::wcout << L"Error : " << argv[n] << L"(" << e.m_line << L"," << e.m_posInLine << L") : " << getReasonText(e) << std::endl;
+
+#ifdef _DEBUG
+				::system("pause");
+#endif
+
 				break;
 			}
 		}
