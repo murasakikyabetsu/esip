@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "ESInterpreter.h"
 
+#include "Date.h"
+
 #include <wchar.h>
 #include <sstream>
 
@@ -164,7 +166,14 @@ std::wstring Value::toString() const
 	case VT_STRING:
 		return m_stringValue;
 	case VT_OBJECT:
-		return L"Object";
+		{
+			Value value = m_pObjectValue->getVariable(L"toString", true);
+			if (!value.isCallable())
+				throw ESException(ESException::R_REFERENCEERROR, m_referenceName.c_str());
+
+			std::vector<Value> arguments;
+			return value.toObject()->call(m_pObjectValue, arguments).toString();
+		}
 	}
 }
 
@@ -660,6 +669,8 @@ ESInterpreter::ESInterpreter(void(*pCallback)(int, int))
 	m_pGlobalObject = Object::create();
 	m_pGlobalObject->setVariable(L"Object", m_pStandardObject);
 	m_pGlobalObject->setVariable(L"Function", m_pStandardFunctionObject);
+
+	DateAdapter()(this, m_pGlobalObject);
 }
 
 

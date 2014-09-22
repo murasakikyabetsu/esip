@@ -29,12 +29,10 @@ void ConsoleAdapter::operator()(ESInterpreter *pInterpreter, Object *pObject)
 			CONSOLE_SCREEN_BUFFER_INFO csbf;
 			::GetConsoleScreenBufferInfo(hStdout, &csbf);
 
-			COORD coset = { 0, csbf.dwCursorPosition.Y };
 			DWORD dwWritten;
-			::FillConsoleOutputCharacter(hStdout, ' ', csbf.dwSize.X, coset, &dwWritten);
+			::FillConsoleOutputCharacter(hStdout, ' ', csbf.dwSize.X - csbf.dwCursorPosition.X, csbf.dwCursorPosition, &dwWritten);
 			::SetConsoleTextAttribute(hStdout, FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED);
-			::FillConsoleOutputAttribute(hStdout, FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED, csbf.dwSize.X, coset, &dwWritten);
-			::SetConsoleCursorPosition(hStdout, coset);
+			::FillConsoleOutputAttribute(hStdout, FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED, csbf.dwSize.X - csbf.dwCursorPosition.X, csbf.dwCursorPosition, &dwWritten);
 
 			std::wcout << arguments[0].toString() << std::endl;
 		}

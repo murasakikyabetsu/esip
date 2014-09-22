@@ -132,12 +132,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Date.h" />
     <ClInclude Include="ESInterpreter.h" />
     <ClInclude Include="ESIPObjects.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Date.cpp" />
     <ClCompile Include="ESInterpreter.cpp" />
     <ClCompile Include="ESIPObjects.cpp" />
     <ClCompile Include="stdafx.cpp">
