@@ -416,7 +416,7 @@ Value Expression::run(Object *pScope, Object *pThis)
 			}
 
 			return value.toObject()->construct(arguments);
-	}
+		}
 	case ET_LEFTHADSIDE:
 		{
 			Value value = m_expressionSets[0]->expression->run(pScope, pThis);
@@ -943,7 +943,7 @@ std::unique_ptr<Expression> ESInterpreter::parseMemberExpression()
 			do
 			{
 				pFunctionExpression->m_expressionSets.back()->arguments.push_back(parsePrimaryExpression(TT_IDENTIFIER));
-				pFunctionExpression->m_pVariableEnvironment->setVariable(pFunctionExpression->m_expressionSets.back()->token.value.c_str(), Value());
+				pFunctionExpression->m_pVariableEnvironment->setVariable(pFunctionExpression->m_expressionSets.back()->arguments.back()->m_expressionSets[0]->token.value.c_str(), Value());
 			}
 			while (getNextToken(L','));
 		}
