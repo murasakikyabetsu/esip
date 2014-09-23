@@ -80,6 +80,7 @@ public:
 	Value(const wchar_t *pValue);
 	Value(Object *pValue);
 	Value(const Value &value);
+	Value(Value && value);
 	virtual ~Value();
 
 	Value& operator=(double value);
@@ -137,14 +138,12 @@ private:
 
 public:
 
-	Object& operator=(const Object &obj);
-
 	virtual ~Object();
 
 	Value call(Object *pThis, std::vector<Value> &arguments);	// [[Call]] - Function Object
 	Value construct(std::vector<Value> &arguments);				// [[Construct]] - Function Object
 
-	void setVariable(const wchar_t *pName, const Value &value);
+	void setVariable(const wchar_t *pName, Value value);
 	Value getVariable(const wchar_t *pName, bool isThis);
 
 	void setCapture(std::function<bool(const wchar_t *pName, const Value &value, void*)> pSetVariable, std::function<bool(const wchar_t *pName, Value &value, void*)> pGetVariable, std::function<void(void*)> pDestroy, void *pUserParam);

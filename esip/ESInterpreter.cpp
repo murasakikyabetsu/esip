@@ -73,6 +73,33 @@ Value::Value(const Value &value)
 	m_referenceName = value.m_referenceName;
 }
 
+Value::Value(Value && value)
+{
+	m_type = value.m_type;
+	switch (m_type)
+	{
+	case VT_INVALID:
+		break;
+	case VT_UNDEFINED:
+		break;
+	case VT_NUMBER:
+		m_numberValue = value.m_numberValue;
+		break;
+	case VT_BOOLEAN:
+		m_booleanValue = value.m_booleanValue;
+		break;
+	case VT_STRING:
+		m_stringValue = std::move(value.m_stringValue);
+		break;
+	case VT_OBJECT:
+		m_pObjectValue = value.m_pObjectValue;
+		break;
+	}
+
+	m_pBase = value.m_pBase;
+	m_referenceName = std::move(value.m_referenceName);
+}
+
 Value::~Value()
 {
 
@@ -276,20 +303,6 @@ Object* Object::create()
 	return Object::m_objects.back().get();
 }
 
-Object& Object::operator = (const Object &obj)
-{
-	m_pNativeFunction = obj.m_pNativeFunction;
-	m_pFunctionBody = obj.m_pFunctionBody;
-	m_pScope = obj.m_pScope;
-
-	for (const auto& v : obj.m_variable)
-	{
-		setVariable(v.first.c_str(), v.second);
-	}
-
-	return *this;
-}
-
 Value Object::call(Object *pThis, std::vector<Value> &arguments)
 {
 	if (m_pNativeFunction)
@@ -320,12 +333,12 @@ Value Object::construct(std::vector<Value> &arguments)
 	return value.m_type == Value::VT_OBJECT ? value : pObject;
 }
 
-void Object::setVariable(const wchar_t *pName, const Value &value)
+void Object::setVariable(const wchar_t *pName, Value value)
 {
 	if (m_pSetVariable && m_pSetVariable(pName, value, m_pUserParam))
 		return;
 
-	m_variable[pName] = value;
+	m_variable[pName] = std::move(value);
 	m_variable[pName].m_pBase = this;
 	m_variable[pName].m_referenceName = pName;
 }
