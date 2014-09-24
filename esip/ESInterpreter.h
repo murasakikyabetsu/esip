@@ -67,10 +67,14 @@ public:
 
 private:
 
-	double m_numberValue;
-	bool m_booleanValue;
+	union
+	{
+		double number;
+		bool boolean;
+		Object *pObject;
+
+	} m_value;
 	std::wstring m_stringValue;
-	Object *m_pObjectValue;
 
 public:
 
@@ -87,6 +91,8 @@ public:
 	Value& operator=(bool value);
 	Value& operator=(const wchar_t *pValue);
 	Value& operator=(Object *pValue);
+	Value& operator=(const Value &value);
+	Value& operator=(Value && value);
 
 	double toNumber() const;
 	bool toBoolean() const;
@@ -185,6 +191,7 @@ public:
 	{
 		std::unique_ptr<Expression> expression;
 		TOKEN token;
+		double numberValue;
 		std::vector<std::unique_ptr<Expression>> arguments;
 	} EXPRESSIONSET;
 	std::vector<std::unique_ptr<EXPRESSIONSET>> m_expressionSets;

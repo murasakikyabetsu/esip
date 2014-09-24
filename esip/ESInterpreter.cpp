@@ -26,14 +26,14 @@ Value::Value() : m_type(VT_UNDEFINED), m_pBase(nullptr)
 
 }
 
-Value::Value(double value) : m_type(VT_NUMBER), m_numberValue(value), m_pBase(nullptr)
+Value::Value(double value) : m_type(VT_NUMBER), m_pBase(nullptr)
 {
-
+	m_value.number = value;
 }
 
-Value::Value(bool value) : m_type(VT_BOOLEAN), m_booleanValue(value), m_pBase(nullptr)
+Value::Value(bool value) : m_type(VT_BOOLEAN), m_pBase(nullptr)
 {
-
+	m_value.boolean = value;
 }
 
 Value::Value(const wchar_t *pValue) : m_type(VT_STRING), m_stringValue(pValue), m_pBase(nullptr)
@@ -41,34 +41,18 @@ Value::Value(const wchar_t *pValue) : m_type(VT_STRING), m_stringValue(pValue), 
 
 }
 
-Value::Value(Object *pValue) : m_type(VT_OBJECT), m_pObjectValue(pValue), m_pBase(nullptr)
+Value::Value(Object *pValue) : m_type(VT_OBJECT), m_pBase(nullptr)
 {
-
+	m_value.pObject = pValue;
 }
 
 Value::Value(const Value &value)
 {
 	m_type = value.m_type;
-	switch (m_type)
-	{
-	case VT_INVALID:
-		break;
-	case VT_UNDEFINED:
-		break;
-	case VT_NUMBER:
-		m_numberValue = value.m_numberValue;
-		break;
-	case VT_BOOLEAN:
-		m_booleanValue = value.m_booleanValue;
-		break;
-	case VT_STRING:
+	if (m_type == VT_STRING)
 		m_stringValue = value.m_stringValue;
-		break;
-	case VT_OBJECT:
-		m_pObjectValue = value.m_pObjectValue;
-		break;
-	}
-
+	else
+		m_value = value.m_value;
 	m_pBase = value.m_pBase;
 	m_referenceName = value.m_referenceName;
 }
@@ -76,26 +60,10 @@ Value::Value(const Value &value)
 Value::Value(Value && value)
 {
 	m_type = value.m_type;
-	switch (m_type)
-	{
-	case VT_INVALID:
-		break;
-	case VT_UNDEFINED:
-		break;
-	case VT_NUMBER:
-		m_numberValue = value.m_numberValue;
-		break;
-	case VT_BOOLEAN:
-		m_booleanValue = value.m_booleanValue;
-		break;
-	case VT_STRING:
+	if (m_type == VT_STRING)
 		m_stringValue = std::move(value.m_stringValue);
-		break;
-	case VT_OBJECT:
-		m_pObjectValue = value.m_pObjectValue;
-		break;
-	}
-
+	else
+		m_value = value.m_value;
 	m_pBase = value.m_pBase;
 	m_referenceName = std::move(value.m_referenceName);
 }
@@ -108,14 +76,14 @@ Value::~Value()
 Value& Value::operator=(double value)
 {
 	m_type = VT_NUMBER;
-	m_numberValue = value;
+	m_value.number = value;
 	return *this;
 }
 
 Value& Value::operator=(bool value)
 {
 	m_type = VT_BOOLEAN;
-	m_booleanValue = value;
+	m_value.boolean = value;
 	return *this;
 }
 
@@ -129,7 +97,33 @@ Value& Value::operator=(const wchar_t *pValue)
 Value& Value::operator=(Object *pValue)
 {
 	m_type = VT_OBJECT;
-	m_pObjectValue = pValue;
+	m_value.pObject = pValue;
+	return *this;
+}
+
+Value& Value::operator=(const Value &value)
+{
+	m_type = value.m_type;
+	if (m_type == VT_STRING)
+		m_stringValue = value.m_stringValue;
+	else
+		m_value = value.m_value;
+	m_pBase = value.m_pBase;
+	m_referenceName = value.m_referenceName;
+
+	return *this;
+}
+
+Value& Value::operator=(Value && value)
+{
+	m_type = value.m_type;
+	if (m_type == VT_STRING)
+		m_stringValue = std::move(value.m_stringValue);
+	else
+		m_value = value.m_value;
+	m_pBase = value.m_pBase;
+	m_referenceName = std::move(value.m_referenceName);
+
 	return *this;
 }
 
@@ -143,9 +137,9 @@ double Value::toNumber() const
 	case VT_UNDEFINED:
 		return 0;
 	case VT_NUMBER:
-		return m_numberValue;
+		return m_value.number;
 	case VT_BOOLEAN:
-		return m_booleanValue ? 1 : 0;
+		return m_value.boolean ? 1 : 0;
 	case VT_STRING:
 		return ::_wtof(m_stringValue.c_str());
 	case VT_OBJECT:
@@ -163,9 +157,9 @@ bool Value::toBoolean() const
 	case VT_UNDEFINED:
 		return false;
 	case VT_NUMBER:
-		return m_numberValue ? true : false;
+		return m_value.number ? true : false;
 	case VT_BOOLEAN:
-		return m_booleanValue;
+		return m_value.boolean;
 	case VT_STRING:
 		return !m_stringValue.empty();
 	case VT_OBJECT:
@@ -185,21 +179,21 @@ std::wstring Value::toString() const
 	case VT_NUMBER:
 		{
 			std::wstringstream buf;
-			buf << std::fixed << m_numberValue;
+			buf << std::fixed << m_value.number;
 			return buf.str();
 		}
 	case VT_BOOLEAN:
-		return m_booleanValue ? L"true" : L"false";
+		return m_value.boolean ? L"true" : L"false";
 	case VT_STRING:
 		return m_stringValue;
 	case VT_OBJECT:
 		{
-			Value value = m_pObjectValue->getVariable(L"toString", true);
+			Value value = m_value.pObject->getVariable(L"toString", true);
 			if (!value.isCallable())
 				throw ESException(ESException::R_REFERENCEERROR, m_referenceName.c_str());
 
 			std::vector<Value> arguments;
-			return value.toObject()->call(m_pObjectValue, arguments).toString();
+			return value.toObject()->call(m_value.pObject, arguments).toString();
 		}
 	}
 }
@@ -220,7 +214,7 @@ Object* Value::toObject() const
 	case VT_STRING:
 		return nullptr;
 	case VT_OBJECT:
-		return m_pObjectValue;
+		return m_value.pObject;
 	}
 }
 
@@ -236,7 +230,7 @@ bool Value::isCallable() const
 	case VT_STRING:
 		return false;
 	case VT_OBJECT:
-		return m_pObjectValue->m_pNativeFunction || m_pObjectValue->m_pFunctionBody;
+		return m_value.pObject->m_pNativeFunction || m_value.pObject->m_pFunctionBody;
 	}
 }
 
@@ -399,7 +393,7 @@ Value Expression::run(Object *pScope, Object *pThis)
 	switch (m_type)
 	{
 	case ET_NUMBER:
-		return ::_wtof(m_expressionSets[0]->token.value.c_str());
+		return m_expressionSets[0]->numberValue;
 
 	case ET_STRING:
 		return m_expressionSets[0]->token.value.c_str();
@@ -890,6 +884,7 @@ std::unique_ptr<Expression> ESInterpreter::parsePrimaryExpression(TOKENTYPE requ
 		auto pExpression = std::make_unique<Expression>(this, Expression::ET_NUMBER);
 		pExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 		pExpression->m_expressionSets.back()->token = m_token;
+		pExpression->m_expressionSets.back()->numberValue = ::_wtof(m_token.value.c_str());
 		getNextToken();
 
 		return pExpression;

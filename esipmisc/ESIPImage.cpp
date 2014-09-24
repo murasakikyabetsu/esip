@@ -129,7 +129,16 @@ void ESIPImageAdapter::operator()(ESInterpreter *pInterpreter, Object *pObject)
 		pObject->setVariable(L"ESIP", pESIP);
 	}
 
-	pESIP->setVariable(L"Image", pInterpreter->createFunctionObject(ESIPImageAdapter::constructor, pInterpreter));
+	Object *pImage = pInterpreter->createFunctionObject(ESIPImageAdapter::constructor, pInterpreter);
+	pESIP->setVariable(L"Image", pImage);
+
+	Object *pPrototype = pInterpreter->createObject();
+	pImage->setVariable(L"prototype", pPrototype);
+
+	pPrototype->setVariable(L"load", pInterpreter->createFunctionObject(ESIPImageAdapter::load, nullptr));
+	pPrototype->setVariable(L"save", pInterpreter->createFunctionObject(ESIPImageAdapter::save, nullptr));
+	pPrototype->setVariable(L"getPixel", pInterpreter->createFunctionObject(ESIPImageAdapter::getPixel, nullptr));
+	pPrototype->setVariable(L"setPixel", pInterpreter->createFunctionObject(ESIPImageAdapter::setPixel, nullptr));
 }
 
 Value ESIPImageAdapter::constructor(Object *pThis, std::vector<Value> &arguments, void *pUserParam)
@@ -138,11 +147,6 @@ Value ESIPImageAdapter::constructor(Object *pThis, std::vector<Value> &arguments
 
 	ESIPImage *pImage = new ESIPImage(pInterpreter, pThis);
 	pThis->setCapture(ESIPImageAdapter::setVariable, ESIPImageAdapter::getVariable, ESIPImageAdapter::destroy, pImage);
-
-	pThis->setVariable(L"load", pInterpreter->createFunctionObject(ESIPImageAdapter::load, pImage));
-	pThis->setVariable(L"save", pInterpreter->createFunctionObject(ESIPImageAdapter::save, pImage));
-	pThis->setVariable(L"getPixel", pInterpreter->createFunctionObject(ESIPImageAdapter::getPixel, pImage));
-	pThis->setVariable(L"setPixel", pInterpreter->createFunctionObject(ESIPImageAdapter::setPixel, pImage));
 
 	if (1 <= arguments.size())
 		pImage->load(arguments[0].toString().c_str());
@@ -201,7 +205,7 @@ void ESIPImageAdapter::destroy(void *pUserParam)
 
 Value ESIPImageAdapter::load(Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 {
-	ESIPImage *pImage = static_cast<ESIPImage*>(pUserParam);
+	ESIPImage *pImage = static_cast<ESIPImage*>(pThis->m_pUserParam);
 
 	if (1 <= arguments.size())
 		pImage->load(arguments[0].toString().c_str());
@@ -211,7 +215,7 @@ Value ESIPImageAdapter::load(Object *pThis, std::vector<Value> &arguments, void 
 
 Value ESIPImageAdapter::save(Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 {
-	ESIPImage *pImage = static_cast<ESIPImage*>(pUserParam);
+	ESIPImage *pImage = static_cast<ESIPImage*>(pThis->m_pUserParam);
 
 	if (1 <= arguments.size())
 		pImage->save(arguments[0].toString().c_str());
@@ -221,7 +225,7 @@ Value ESIPImageAdapter::save(Object *pThis, std::vector<Value> &arguments, void 
 
 Value ESIPImageAdapter::getPixel(Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 {
-	ESIPImage *pImage = static_cast<ESIPImage*>(pUserParam);
+	ESIPImage *pImage = static_cast<ESIPImage*>(pThis->m_pUserParam);
 
 	if (2 <= arguments.size())
 	{
@@ -244,7 +248,7 @@ Value ESIPImageAdapter::getPixel(Object *pThis, std::vector<Value> &arguments, v
 
 Value ESIPImageAdapter::setPixel(Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 {
-	ESIPImage *pImage = static_cast<ESIPImage*>(pUserParam);
+	ESIPImage *pImage = static_cast<ESIPImage*>(pThis->m_pUserParam);
 
 	if (5 <= arguments.size())
 	{
