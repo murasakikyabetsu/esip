@@ -52,6 +52,7 @@ DateAdapter::~DateAdapter()
 void DateAdapter::operator()(ESInterpreter *pInterpreter, Object *pObject)
 {
 	Object *pDate = pInterpreter->createFunctionObject(DateAdapter::constructor, pInterpreter);
+	pDate->m_class = L"Date";
 	pObject->setVariable(L"Date", pDate);
 
 	Object *pPrototype = pInterpreter->createObject();
@@ -62,23 +63,24 @@ void DateAdapter::operator()(ESInterpreter *pInterpreter, Object *pObject)
 
 Value DateAdapter::constructor(Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 {
-	ESInterpreter *pInterpreter = (ESInterpreter*)pUserParam;
+	ESInterpreter *pInterpreter = static_cast<ESInterpreter*>(pUserParam);
 
 	Date *pDate = new Date();
 	pThis->setCapture(nullptr, nullptr, DateAdapter::destroy, pDate);
+	pThis->m_class = L"Date";
 
 	return Value();
 }
 
 Value DateAdapter::toString(Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 {
-	Date *pDate = (Date*)pThis->m_pUserParam;
+	Date *pDate = static_cast<Date*>(pThis->m_pUserParam);
 
 	return pDate->toString().c_str();
 }
 
 void DateAdapter::destroy(void *pUserParam)
 {
-	Date *pDate = (Date*)pUserParam;
+	Date *pDate = static_cast<Date*>(pUserParam);
 	delete pDate;
 }

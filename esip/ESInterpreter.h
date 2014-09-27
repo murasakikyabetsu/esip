@@ -101,12 +101,13 @@ public:
 
 	bool isCallable() const;
 
-	Value add(const Value &value) const;
-	Value sub(const Value &value) const;
-	Value mul(const Value &value) const;
-	Value div(const Value &value) const;
-	Value mod(const Value &value) const;
-	Value lessThan(const Value &value) const;
+	Value operator+(const Value &value) const;
+	Value operator-(const Value &value) const;
+	Value operator*(const Value &value) const;
+	Value operator/(const Value &value) const;
+	Value operator%(const Value &value) const;
+	Value operator<(const Value &value) const;
+	Value operator==(const Value &value) const;
 
 };
 
@@ -146,6 +147,8 @@ public:
 
 	virtual ~Object();
 
+	Object& operator=(const Object &obj);
+
 	Value call(Object *pThis, std::vector<Value> &arguments);	// [[Call]] - Function Object
 	Value construct(std::vector<Value> &arguments);				// [[Construct]] - Function Object
 
@@ -168,6 +171,7 @@ public:
 		ET_IDENTIFIER,
 		ET_THIS,
 		ET_OBJECT,
+		ET_ARRAY,
 		ET_NEW,
 		ET_LEFTHADSIDE,
 		ET_FUNCTION,
@@ -176,6 +180,9 @@ public:
 		ET_MULTIPLICATIVE,
 		ET_ADDITIVE,
 		ET_RELATIONAL,
+		ET_EQUALITY,
+		ET_BITWISE,
+		ET_BINARYLOGICAL,
 		ET_ASSIGNMENT,
 	};
 
@@ -290,6 +297,9 @@ public:
 		TT_PLUSPLUS,
 		TT_MINUSMINUS,
 		TT_PLUSEQUAL,
+		TT_EQUALEQUAL,
+		TT_ANDAND,
+		TT_OROR,
 
 		TT_FUNCTION,
 		TT_VAR,
@@ -336,7 +346,10 @@ private:
 	std::unique_ptr<Expression> parseShiftExpression();
 	std::unique_ptr<Expression> parseRelationalExpression();
 	std::unique_ptr<Expression> parseEqualityExpression();
+	std::unique_ptr<Expression> parseBitwiseANDExpression();
+	std::unique_ptr<Expression> parseBitwiseXORExpression();
 	std::unique_ptr<Expression> parseBinaryBitwiseExpression();
+	std::unique_ptr<Expression> parseLogicalAndExpression();
 	std::unique_ptr<Expression> parseBinaryLogicalExpression();
 	std::unique_ptr<Expression> parseConditionalExpression();
 	std::unique_ptr<Expression> parseAssignmentExpression();

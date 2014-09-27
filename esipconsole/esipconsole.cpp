@@ -13,7 +13,6 @@
 
 #include <Windows.h>
 
-
 std::wstring getReasonText(ESException &e)
 {
 	switch (e.m_reason)
@@ -31,6 +30,8 @@ std::wstring getReasonText(ESException &e)
 
 int _tmain(int argc, _TCHAR* argv[])
 {
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+
 	ESInterpreter ip;
 
 	Uint8ArrayAdapter()(&ip, ip.getGlobalObject());

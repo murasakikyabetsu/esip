@@ -143,7 +143,7 @@ void ESIPImageAdapter::operator()(ESInterpreter *pInterpreter, Object *pObject)
 
 Value ESIPImageAdapter::constructor(Object *pThis, std::vector<Value> &arguments, void *pUserParam)
 {
-	ESInterpreter *pInterpreter = (ESInterpreter*)pUserParam;
+	ESInterpreter *pInterpreter = static_cast<ESInterpreter*>(pUserParam);
 
 	ESIPImage *pImage = new ESIPImage(pInterpreter, pThis);
 	pThis->setCapture(ESIPImageAdapter::setVariable, ESIPImageAdapter::getVariable, ESIPImageAdapter::destroy, pImage);
