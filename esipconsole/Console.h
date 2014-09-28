@@ -3,14 +3,16 @@
 #include "..\esip\ESInterpreter.h"
 #include <vector>
 
-class ConsoleAdapter
+class Console : public NativeObject
 {
 public:
 
-	ConsoleAdapter();
-	virtual ~ConsoleAdapter();
+	static Object* createObject(ESInterpreter *pInterpreter);
 
-	void operator()(ESInterpreter *pInterpreter, Object *pObject);
+public:
+
+	Console(ESInterpreter *pInterpreter);
+	virtual ~Console();
 
 };
 

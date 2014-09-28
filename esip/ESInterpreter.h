@@ -6,6 +6,7 @@
 #include <list>
 #include <unordered_map>
 #include <functional>
+#include <map>
 
 typedef struct tagTOKEN
 {
@@ -95,6 +96,7 @@ public:
 	Value& operator=(Value && value);
 
 	double toNumber() const;
+	int toInt32() const;
 	bool toBoolean() const;
 	std::wstring toString() const;
 	Object* toObject() const;
@@ -106,6 +108,8 @@ public:
 	Value operator*(const Value &value) const;
 	Value operator/(const Value &value) const;
 	Value operator%(const Value &value) const;
+	Value operator|(const Value &value) const;
+	Value operator&(const Value &value) const;
 	Value operator<(const Value &value) const;
 	Value operator==(const Value &value) const;
 
@@ -135,7 +139,9 @@ public:
 	std::wstring m_class;	// [[Class]] - Object
 	Object *m_pPrototype;	// [[Prototype]] - Object
 
-	std::function<Value(Object*, std::vector<Value>&, void*)> m_pNativeFunction;
+	std::function<Value(Object*, std::vector<Value>, void*)> m_pNativeCall;
+	std::function<Value(Object*, std::vector<Value>, void*)> m_pNativeConstructor;
+
 	FunctionExpression *m_pFunctionBody;											// [[Code]] - Function Object
 	Object *m_pScope;																// [[Scope]] - Function Object
 
@@ -149,8 +155,8 @@ public:
 
 	Object& operator=(const Object &obj);
 
-	Value call(Object *pThis, std::vector<Value> &arguments);	// [[Call]] - Function Object
-	Value construct(std::vector<Value> &arguments);				// [[Construct]] - Function Object
+	Value call(Object *pThis, std::vector<Value> arguments, bool isConstruct);	// [[Call]] - Function Object
+	Value construct(std::vector<Value> arguments);								// [[Construct]] - Function Object
 
 	void setVariable(const wchar_t *pName, Value value);
 	Value getVariable(const wchar_t *pName, bool isThis);
@@ -170,6 +176,7 @@ public:
 		ET_STRING,
 		ET_IDENTIFIER,
 		ET_THIS,
+		ET_BOOLEAN,
 		ET_OBJECT,
 		ET_ARRAY,
 		ET_NEW,
@@ -240,7 +247,10 @@ public:
 		ST_BLOCK,
 		ST_VAR,
 		ST_FOR,
+		ST_WHILE,
 		ST_BREAK,
+		ST_CONTINUE,
+		ST_RETURN,
 		ST_IF,
 		ST_EXPRESSION,
 		ST_SOURCEELEMENT,
@@ -250,6 +260,8 @@ public:
 	{
 		RT_NORMAL,
 		RT_BREAK,
+		RT_CONTINUE,
+		RT_RETURN,
 	};
 
 private:
@@ -281,6 +293,42 @@ public:
 
 };
 
+class NativeObject
+{
+protected:
+
+	ESInterpreter *m_pInterpreter;
+
+public:
+
+	static Value call(ESInterpreter *pInterpreter, Object *pThis, std::vector<Value> arguments)
+	{
+		// todo オブジェクトを作ってコンストラクタを呼ぶ
+
+		return Value();
+	}
+
+public:
+
+	NativeObject(ESInterpreter *pInterpreter) : m_pInterpreter(pInterpreter){}
+	virtual ~NativeObject() {}
+
+	virtual Value constructor(Object *pThis, std::vector<Value> arguments)
+	{
+		return Value();
+	}
+
+	virtual bool setVariable(Object *pThis, const wchar_t *pName, const Value &value)
+	{
+		return false;
+	}
+
+	virtual bool getVariable(Object *pThis, const wchar_t *pName, Value &value)
+	{
+		return false;
+	}
+};
+
 class ESInterpreter
 {
 public:
@@ -293,18 +341,26 @@ public:
 		TT_NUMBER = 256,
 		TT_STRING,
 		TT_IDENTIFIER,
+		TT_TRUE,
+		TT_FALSE,
 
 		TT_PLUSPLUS,
 		TT_MINUSMINUS,
 		TT_PLUSEQUAL,
+		TT_OREQUAL,
+		TT_ANDEQUAL,
 		TT_EQUALEQUAL,
 		TT_ANDAND,
 		TT_OROR,
+		TT_LESSEQUAL,
 
 		TT_FUNCTION,
 		TT_VAR,
 		TT_FOR,
+		TT_WHILE,
 		TT_BREAK,
+		TT_CONTINUE,
+		TT_RETURN,
 		TT_IF,
 		TT_ELSE,
 		TT_THIS,
@@ -336,6 +392,8 @@ private:
 
 	bool getNextToken(int type = TT_UNDEFINED, bool exception = false);
 
+	std::unique_ptr<Expression> parseExpressionBase(std::vector<int> separators, Expression::EXPRESSIONTYPE newType, std::function<std::unique_ptr<Expression>()> nextParser);
+
 	std::unique_ptr<Expression> parsePrimaryExpression(TOKENTYPE requested = TT_UNDEFINED);
 	std::unique_ptr<Expression> parseMemberExpression();
 	std::unique_ptr<Expression> parseLeftHandSideExpression();
@@ -346,10 +404,7 @@ private:
 	std::unique_ptr<Expression> parseShiftExpression();
 	std::unique_ptr<Expression> parseRelationalExpression();
 	std::unique_ptr<Expression> parseEqualityExpression();
-	std::unique_ptr<Expression> parseBitwiseANDExpression();
-	std::unique_ptr<Expression> parseBitwiseXORExpression();
 	std::unique_ptr<Expression> parseBinaryBitwiseExpression();
-	std::unique_ptr<Expression> parseLogicalAndExpression();
 	std::unique_ptr<Expression> parseBinaryLogicalExpression();
 	std::unique_ptr<Expression> parseConditionalExpression();
 	std::unique_ptr<Expression> parseAssignmentExpression();
@@ -364,6 +419,8 @@ private:
 
 	Object* createFunctionObject();
 
+	static Value parseInt(Object *pThis, std::vector<Value> arguments, void *pUserParam);
+
 public:
 
 	ESInterpreter(void (*pCallback)(int, int) = NULL);
@@ -373,7 +430,75 @@ public:
 
 	Object* getGlobalObject();
 	Object* createObject();
-	Object* createFunctionObject(std::function<Value(Object*, std::vector<Value>&, void*)> pNativeFunction, void *pUserParam);
+	Object* createFunctionObject(std::function<Value(Object*, std::vector<Value>, void*)> pNativeCall, std::function<Value(Object*, std::vector<Value>, void*)> pNativeConstructor, void *pUserParam);
 	Object* createFunctionObject(FunctionExpression *pExpression, Object *pScope);
-};
 
+	template <class T>
+	Object* createNativeObject(
+		std::wstring className,
+		std::map<std::wstring, Value(*)(ESInterpreter*, Object*, std::vector<Value>)> functions,
+		std::map<std::wstring, Value(T::*)(Object*, std::vector<Value>)> prototypeFunctions,
+		Value(T::*pConstructor)(Object*, std::vector<Value>) = &T::constructor,
+		Value(*pCall)(ESInterpreter*, Object*, std::vector<Value>) = &NativeObject::call)
+	{
+		Object *pObject = createFunctionObject([=](Object *pThis, std::vector<Value> arguments, void *pUserParam)
+		{
+			ESInterpreter *pInterpreter = (ESInterpreter*)pUserParam;
+
+			return pCall(pInterpreter, pThis, arguments);
+
+		}, [=](Object *pThis, std::vector<Value>& arguments, void *pUserParam)
+		{
+			ESInterpreter *pInterpreter = (ESInterpreter*)pUserParam;
+
+			T *p = new T(pInterpreter);
+
+			pThis->setCapture([=](const wchar_t *pName, const Value &value, void *pUserParam)
+			{
+				T *p = static_cast<T*>(pUserParam);
+				return p->setVariable(pThis, pName, value);
+			}, [=](const wchar_t *pName, Value &value, void *pUserParam)
+			{
+				T *p = static_cast<T*>(pUserParam);
+				return p->getVariable(pThis, pName, value);
+			}, [](void *pUserParam)
+			{
+				T *p = static_cast<T*>(pUserParam);
+				delete p;
+			}, p);
+			pThis->m_class = className;
+
+			return (p->*pConstructor)(pThis, arguments);
+
+		}, this);
+
+		pObject->m_class = className;
+
+		for (auto &v : functions)
+		{
+			pObject->setVariable(v.first.c_str(), createFunctionObject([=](Object *pThis, std::vector<Value> arguments, void *pUserParam)
+			{
+				ESInterpreter *p = static_cast<ESInterpreter*>(pUserParam);
+				return v.second(p, pThis, arguments);
+			}, nullptr, this));
+		}
+
+		Object *pPrototype = createObject();
+		pObject->setVariable(L"prototype", pPrototype);
+
+		for (auto &v : prototypeFunctions)
+		{
+			pPrototype->setVariable(v.first.c_str(), createFunctionObject([=](Object *pThis, std::vector<Value> arguments, void *pUserParam)
+			{
+				T *p = static_cast<T*>(pThis->m_pUserParam);
+
+				if (pThis->m_class != className || !p)
+					throw ESException(ESException::R_TYPEERROR, (L"not " + className).c_str());
+
+				return (p->*v.second)(pThis, arguments);
+			}, nullptr, nullptr));
+		}
+
+		return pObject;
+	}
+};

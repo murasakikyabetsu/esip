@@ -1,8 +1,7 @@
 #include "stdafx.h"
 #include "ESInterpreter.h"
 
-#include "Date.h"
-#include "Array.h"
+#include "StandardObjects.h"
 
 #include <wchar.h>
 #include <sstream>
@@ -148,6 +147,11 @@ double Value::toNumber() const
 	}
 }
 
+int Value::toInt32() const
+{
+	return (int)toNumber();
+}
+
 bool Value::toBoolean() const
 {
 	switch (m_type)
@@ -180,7 +184,10 @@ std::wstring Value::toString() const
 	case VT_NUMBER:
 		{
 			std::wstringstream buf;
-			buf << std::fixed << m_value.number;
+			if (m_value.number == (int)m_value.number)
+				buf << (int)m_value.number;
+			else
+				buf << std::fixed << m_value.number;
 			return buf.str();
 		}
 	case VT_BOOLEAN:
@@ -194,7 +201,7 @@ std::wstring Value::toString() const
 				throw ESException(ESException::R_REFERENCEERROR, m_referenceName.c_str());
 
 			std::vector<Value> arguments;
-			return value.toObject()->call(m_value.pObject, arguments).toString();
+			return value.toObject()->call(m_value.pObject, arguments, false).toString();
 		}
 	}
 }
@@ -231,7 +238,7 @@ bool Value::isCallable() const
 	case VT_STRING:
 		return false;
 	case VT_OBJECT:
-		return m_value.pObject->m_pNativeFunction || m_value.pObject->m_pFunctionBody;
+		return m_value.pObject->m_pNativeCall || m_value.pObject->m_pNativeConstructor || m_value.pObject->m_pFunctionBody;
 	}
 }
 
@@ -275,6 +282,16 @@ Value Value::operator<(const Value &value) const
 		return toNumber() < value.toNumber();
 }
 
+Value Value::operator|(const Value &value) const
+{
+	return (double)(toInt32() | value.toInt32());
+}
+
+Value Value::operator&(const Value &value) const
+{
+	return (double)(toInt32() & value.toInt32());
+}
+
 Value Value::operator==(const Value &value) const
 {
 	if (m_type == value.m_type)
@@ -304,7 +321,7 @@ Value Value::operator==(const Value &value) const
 
 std::list<std::unique_ptr<Object>> Object::m_objects;
 
-Object::Object() : m_pNativeFunction(nullptr), m_pFunctionBody(nullptr), m_pUserParam(nullptr), m_pScope(nullptr), m_pPrototype(nullptr)
+Object::Object() : m_pNativeCall(nullptr), m_pNativeConstructor(nullptr), m_pFunctionBody(nullptr), m_pUserParam(nullptr), m_pScope(nullptr), m_pPrototype(nullptr)
 {
 
 }
@@ -321,7 +338,8 @@ Object::~Object()
 
 Object& Object::operator = (const Object &obj)
 {
-	m_pNativeFunction = obj.m_pNativeFunction;
+	m_pNativeCall = obj.m_pNativeCall;
+	m_pNativeConstructor = obj.m_pNativeConstructor;
 	m_pFunctionBody = obj.m_pFunctionBody;
 	m_pScope = obj.m_pScope;
 
@@ -345,10 +363,15 @@ Object* Object::create()
 	return Object::m_objects.back().get();
 }
 
-Value Object::call(Object *pThis, std::vector<Value> &arguments)
+Value Object::call(Object *pThis, std::vector<Value> arguments, bool isConstruct)
 {
-	if (m_pNativeFunction)
-		return m_pNativeFunction(pThis, arguments, m_pUserParam);
+	if (isConstruct && m_pNativeConstructor)
+		return m_pNativeConstructor(pThis, arguments, m_pUserParam);
+	if (!isConstruct && m_pNativeCall)
+		return m_pNativeCall(pThis, arguments, m_pUserParam);
+
+	if (!m_pFunctionBody)
+		throw ESException(ESException::R_TYPEERROR);
 
 	// todo argumentsオブジェクト
 
@@ -364,13 +387,13 @@ Value Object::call(Object *pThis, std::vector<Value> &arguments)
 	return m_pFunctionBody->m_pFunctionBody->m_result.value;
 }
 
-Value Object::construct(std::vector<Value> &arguments)
+Value Object::construct(std::vector<Value> arguments)
 {
 	Object *pObject = Object::create();
 	pObject->m_class = L"Object";
 	pObject->m_pPrototype = getVariable(L"prototype", true).toObject();
 
-	Value value = call(pObject, arguments);
+	Value value = call(pObject, std::move(arguments), true);
 
 	return value.m_type == Value::VT_OBJECT ? value : pObject;
 }
@@ -388,11 +411,13 @@ void Object::setVariable(const wchar_t *pName, Value value)
 Value Object::getVariable(const wchar_t *pName, bool isThis)
 {
 	Value value;
-	value.m_pBase = this;
-	value.m_referenceName = pName;
 
 	if (m_pGetVariable && m_pGetVariable(pName, value, m_pUserParam))
+	{
+		value.m_pBase = this;
+		value.m_referenceName = pName;
 		return value;
+	}
 
 	auto it = m_variable.find(pName);
 	if (it != m_variable.end())
@@ -412,6 +437,8 @@ Value Object::getVariable(const wchar_t *pName, bool isThis)
 		return m_pScope->getVariable(pName, false);
 
 	value.m_type = Value::VT_INVALID;
+	value.m_pBase = this;
+	value.m_referenceName = pName;
 
 	return value;
 }
@@ -452,6 +479,9 @@ Value Expression::run(Object *pScope, Object *pThis)
 	case ET_THIS:
 		return pThis;
 
+	case ET_BOOLEAN:
+		return m_expressionSets[0]->token.type == ESInterpreter::TT_TRUE ? true : false;
+
 	case ET_OBJECT:
 		{
 			Object *pObject = m_pInterpreter->createObject();
@@ -469,9 +499,7 @@ Value Expression::run(Object *pScope, Object *pThis)
 		{
 			Value value = m_pInterpreter->getGlobalObject()->getVariable(L"Array", true);
 
-			std::vector<Value> arguments;
-			arguments.push_back(Value((double)m_expressionSets.size()));
-			value = value.toObject()->construct(arguments);
+			value = value.toObject()->construct({ Value((double)m_expressionSets.size()) });
 
 			Object *pArray = value.toObject();
 			for (size_t n = 0; n < m_expressionSets.size(); n++)
@@ -531,7 +559,7 @@ Value Expression::run(Object *pScope, Object *pThis)
 						arguments.push_back(m_expressionSets[n]->arguments[a]->run(pScope, pThis));
 					}
 
-					value = value.toObject()->call(pThis, arguments);
+					value = value.toObject()->call(pThis, std::move(arguments), false);
 				}
 
 				pThis = pNewThis;
@@ -554,10 +582,12 @@ Value Expression::run(Object *pScope, Object *pThis)
 		{
 			Value value = m_expressionSets[0]->expression->run(pScope, pThis);
 
-			if (m_expressionSets[0]->token.type == L'-')
-				return -value.toNumber();
-			else if (m_expressionSets[0]->token.type == L'!')
-				return !value.toBoolean();
+			switch (m_expressionSets[0]->token.type)
+			{
+			case L'-':	return -value.toNumber();
+			case L'!':	return !value.toBoolean();
+			case L'~':	return (double)~value.toInt32();
+			}
 
 			return value;
 		}
@@ -566,7 +596,7 @@ Value Expression::run(Object *pScope, Object *pThis)
 	case ET_RELATIONAL:
 	case ET_BITWISE:
 	case ET_EQUALITY:
-	{
+		{
 			Value value = m_expressionSets[0]->expression->run(pScope, pThis);
 			for (size_t n = 1; n < m_expressionSets.size(); n++)
 			{
@@ -578,35 +608,36 @@ Value Expression::run(Object *pScope, Object *pThis)
 				case L'+':	value = value + m_expressionSets[n]->expression->run(pScope, pThis);	break;
 				case L'-':	value = value - m_expressionSets[n]->expression->run(pScope, pThis);	break;
 				case L'<':	value = value < m_expressionSets[n]->expression->run(pScope, pThis);	break;
-				case L'|':	value = (double)(((int)value.toNumber()) | ((int)(m_expressionSets[n]->expression->run(pScope, pThis).toNumber())));	break;
-				case L'^':	value = (double)(((int)value.toNumber()) ^ ((int)(m_expressionSets[n]->expression->run(pScope, pThis).toNumber())));	break;
-				case L'&':	value = (double)(((int)value.toNumber()) & ((int)(m_expressionSets[n]->expression->run(pScope, pThis).toNumber())));	break;
+				case ESInterpreter::TT_LESSEQUAL:	value = (m_expressionSets[n]->expression->run(pScope, pThis) < value).toBoolean() ? false : true; break;
+				case L'|':	value = value | m_expressionSets[n]->expression->run(pScope, pThis);	break;
+				case L'^':	value = (double)(value.toInt32() ^ m_expressionSets[n]->expression->run(pScope, pThis).toInt32());	break;
+				case L'&':	value = value & m_expressionSets[n]->expression->run(pScope, pThis);	break;
 				case ESInterpreter::TT_EQUALEQUAL:	value = value == m_expressionSets[n]->expression->run(pScope, pThis);	break;
 				}
 			}
 			return value;
 		}
 	case ET_BINARYLOGICAL:
-	{
-		Value value = m_expressionSets[0]->expression->run(pScope, pThis);
-		for (size_t n = 1; n < m_expressionSets.size(); n++)
 		{
-			switch (m_expressionSets[n]->token.type)
+			Value value = m_expressionSets[0]->expression->run(pScope, pThis);
+			for (size_t n = 1; n < m_expressionSets.size(); n++)
 			{
-			case ESInterpreter::TT_ANDAND:
-				if (!value.toBoolean())
-					return false;
-				value = m_expressionSets[n]->expression->run(pScope, pThis);
-				break;
-			case ESInterpreter::TT_OROR:
-				if (value.toBoolean())
-					return true;
-				value = m_expressionSets[n]->expression->run(pScope, pThis);
-				break;
+				switch (m_expressionSets[n]->token.type)
+				{
+				case ESInterpreter::TT_ANDAND:
+					if (!value.toBoolean())
+						return false;
+					value = m_expressionSets[n]->expression->run(pScope, pThis);
+					break;
+				case ESInterpreter::TT_OROR:
+					if (value.toBoolean())
+						return true;
+					value = m_expressionSets[n]->expression->run(pScope, pThis);
+					break;
+				}
 			}
+			return value;
 		}
-		return value;
-	}
 	case ET_ASSIGNMENT:
 		{
 			Value lValue = m_expressionSets[0]->expression->run(pScope, pThis);
@@ -620,6 +651,8 @@ Value Expression::run(Object *pScope, Object *pThis)
 			{
 			case L'=':							value = rValue;				break;
 			case ESInterpreter::TT_PLUSEQUAL:	value = lValue + rValue;	break;
+			case ESInterpreter::TT_OREQUAL:		value = lValue | rValue;	break;
+			case ESInterpreter::TT_ANDEQUAL:	value = lValue & rValue;	break;
 			}
 			lValue.m_pBase->setVariable(lValue.m_referenceName.c_str(), value);
 
@@ -678,7 +711,7 @@ void Statement::run(Object *pScope, Object *pThis)
 			{
 				statement->run(pScope, pThis);
 				m_result = statement->m_result;
-				if (m_result.type == RT_BREAK)
+				if (m_result.type == RT_BREAK || m_result.type == RT_CONTINUE || m_result.type == RT_RETURN)
 					break;
 			}
 			break;
@@ -713,15 +746,53 @@ void Statement::run(Object *pScope, Object *pThis)
 					m_result.type = RT_NORMAL;
 					break;
 				}
+				if (m_result.type == RT_CONTINUE)
+					m_result.type = RT_NORMAL;
+				if (m_result.type == RT_RETURN)
+					break;
 
 				if (m_expressions[2])
 					m_expressions[2]->run(pScope, pThis);
 			}
 			break;
 
+		case ST_WHILE:
+			{
+				while (1)
+				{
+					if (!m_expressions[0]->run(pScope, pThis).toBoolean())
+						break;
+
+					m_statements[0]->run(pScope, pThis);
+					m_result = m_statements[0]->m_result;
+
+					if (m_result.type == RT_BREAK)
+					{
+						m_result.type = RT_NORMAL;
+						break;
+					}
+					if (m_result.type == RT_CONTINUE)
+						m_result.type = RT_NORMAL;
+					if (m_result.type == RT_RETURN)
+						break;
+				}
+
+				break;
+			}
 		case ST_BREAK:
 			m_result.type = RT_BREAK;
 			m_result.value = Value();
+			break;
+
+		case ST_CONTINUE:
+			m_result.type = RT_CONTINUE;
+			m_result.value = Value();
+			break;
+
+		case ST_RETURN:
+			if (0 < m_expressions.size())
+				m_result.value = m_expressions[0]->run(pScope, pThis);
+			m_result.type = RT_RETURN;
 			break;
 
 		case ST_IF:
@@ -747,6 +818,8 @@ void Statement::run(Object *pScope, Object *pThis)
 			{
 				statement->run(pScope, pThis);
 				m_result = statement->m_result;
+				if (m_result.type == RT_RETURN)
+					break;
 			}
 			break;
 		}
@@ -775,9 +848,10 @@ ESInterpreter::ESInterpreter(void(*pCallback)(int, int))
 	m_pGlobalObject = Object::create();
 	m_pGlobalObject->setVariable(L"Object", m_pStandardObject);
 	m_pGlobalObject->setVariable(L"Function", m_pStandardFunctionObject);
-
-	DateAdapter()(this, m_pGlobalObject);
-	ArrayAdapter()(this, m_pGlobalObject);
+	m_pGlobalObject->setVariable(L"parseInt", createFunctionObject(ESInterpreter::parseInt, nullptr, nullptr));
+	m_pGlobalObject->setVariable(L"Date", Date::createObject(this));
+	m_pGlobalObject->setVariable(L"Math", Math::createObject(this));
+	m_pGlobalObject->setVariable(L"Array", Array::createObject(this));
 }
 
 
@@ -944,8 +1018,14 @@ bool ESInterpreter::getNextToken(int type, bool exception)
 			m_token.type = TT_VAR;
 		else if (m_token.value == L"for")
 			m_token.type = TT_FOR;
+		else if (m_token.value == L"while")
+			m_token.type = TT_WHILE;
 		else if (m_token.value == L"break")
 			m_token.type = TT_BREAK;
+		else if (m_token.value == L"continue")
+			m_token.type = TT_CONTINUE;
+		else if (m_token.value == L"return")
+			m_token.type = TT_RETURN;
 		else if (m_token.value == L"if")
 			m_token.type = TT_IF;
 		else if (m_token.value == L"else")
@@ -954,6 +1034,10 @@ bool ESInterpreter::getNextToken(int type, bool exception)
 			m_token.type = TT_THIS;
 		else if (m_token.value == L"new")
 			m_token.type = TT_NEW;
+		else if (m_token.value == L"true")
+			m_token.type = TT_TRUE;
+		else if (m_token.value == L"false")
+			m_token.type = TT_FALSE;
 	}
 	else
 	{
@@ -978,6 +1062,20 @@ bool ESInterpreter::getNextToken(int type, bool exception)
 			m_sourcePos += 2;
 			m_posInLine += 2;
 		}
+		else if (m_pSourceCode[m_sourcePos] == L'|' && m_pSourceCode[m_sourcePos + 1] == L'=')
+		{
+			m_token.type = TT_OREQUAL;
+			m_token.value = L"|=";
+			m_sourcePos += 2;
+			m_posInLine += 2;
+		}
+		else if (m_pSourceCode[m_sourcePos] == L'&' && m_pSourceCode[m_sourcePos + 1] == L'=')
+		{
+			m_token.type = TT_ANDEQUAL;
+			m_token.value = L"&=";
+			m_sourcePos += 2;
+			m_posInLine += 2;
+		}
 		else if (m_pSourceCode[m_sourcePos] == L'=' && m_pSourceCode[m_sourcePos + 1] == L'=')
 		{
 			m_token.type = TT_EQUALEQUAL;
@@ -999,6 +1097,13 @@ bool ESInterpreter::getNextToken(int type, bool exception)
 			m_sourcePos += 2;
 			m_posInLine += 2;
 		}
+		else if (m_pSourceCode[m_sourcePos] == L'<' && m_pSourceCode[m_sourcePos + 1] == L'=')
+		{
+			m_token.type = TT_LESSEQUAL;
+			m_token.value = L"<=";
+			m_sourcePos += 2;
+			m_posInLine += 2;
+		}
 		else
 		{
 			m_token.type = m_pSourceCode[m_sourcePos];
@@ -1009,6 +1114,29 @@ bool ESInterpreter::getNextToken(int type, bool exception)
 	}
 
 	return true;
+}
+
+std::unique_ptr<Expression> ESInterpreter::parseExpressionBase(std::vector<int> separators, Expression::EXPRESSIONTYPE newType, std::function<std::unique_ptr<Expression>()> nextParser)
+{
+	auto pExpression = nextParser();
+
+	if (std::find(separators.begin(), separators.end(), m_token.type) == separators.end())
+		return pExpression;
+
+	auto pNewExpression = std::make_unique<Expression>(this, newType);
+	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
+	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
+
+	do
+	{
+		pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
+		pNewExpression->m_expressionSets.back()->token = m_token;
+		getNextToken();
+		pNewExpression->m_expressionSets.back()->expression = nextParser();
+	}
+	while (std::find(separators.begin(), separators.end(), m_token.type) != separators.end());
+
+	return pNewExpression;
 }
 
 std::unique_ptr<Expression> ESInterpreter::parsePrimaryExpression(TOKENTYPE requested)
@@ -1050,6 +1178,22 @@ std::unique_ptr<Expression> ESInterpreter::parsePrimaryExpression(TOKENTYPE requ
 	else if (getNextToken(TT_THIS))
 	{
 		return std::make_unique<Expression>(this, Expression::ET_THIS);
+	}
+	else if (getNextToken(TT_TRUE))
+	{
+		auto pExpression = std::make_unique<Expression>(this, Expression::ET_BOOLEAN);
+		pExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
+		pExpression->m_expressionSets.back()->token = m_token;
+
+		return pExpression;
+	}
+	else if (getNextToken(TT_FALSE))
+	{
+		auto pExpression = std::make_unique<Expression>(this, Expression::ET_BOOLEAN);
+		pExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
+		pExpression->m_expressionSets.back()->token = m_token;
+
+		return pExpression;
 	}
 	else if (getNextToken(L'('))
 	{
@@ -1253,7 +1397,7 @@ std::unique_ptr<Expression> ESInterpreter::parsePostfixExpression()
 
 std::unique_ptr<Expression> ESInterpreter::parseUnaryExpression()
 {
-	if (m_token.type == L'-' || m_token.type == L'!')
+	if (m_token.type == L'-' || m_token.type == L'!' || m_token.type == L'~')
 	{
 		auto pExpression = std::make_unique<Expression>(this, Expression::ET_UNARY);
 
@@ -1270,47 +1414,12 @@ std::unique_ptr<Expression> ESInterpreter::parseUnaryExpression()
 
 std::unique_ptr<Expression> ESInterpreter::parseMultiplicativeExpression()
 {
-	auto pExpression = parseUnaryExpression();
-
-	if (m_token.type != L'*' && m_token.type != L'/' && m_token.type != L'%')
-		return pExpression;
-
-	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_MULTIPLICATIVE);
-	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
-
-	while (m_token.type == L'*' || m_token.type == L'/' || m_token.type == L'%')
-	{
-		pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-		pNewExpression->m_expressionSets.back()->token = m_token;
-		getNextToken();
-		pNewExpression->m_expressionSets.back()->expression = parseMultiplicativeExpression();
-	}
-
-	return pNewExpression;
+	return parseExpressionBase({ L'*', L'/', L'%' }, Expression::ET_MULTIPLICATIVE, std::bind(&ESInterpreter::parseUnaryExpression, this));
 }
 
 std::unique_ptr<Expression> ESInterpreter::parseAdditiveExpression()
 {
-	auto pExpression = parseMultiplicativeExpression();
-
-	if (m_token.type != L'+' && m_token.type != L'-')
-		return pExpression;
-
-	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_ADDITIVE);
-
-	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
-
-	while (m_token.type == L'+' || m_token.type == L'-')
-	{
-		pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-		pNewExpression->m_expressionSets.back()->token = m_token;
-		getNextToken();
-		pNewExpression->m_expressionSets.back()->expression = parseMultiplicativeExpression();
-	}
-
-	return pNewExpression;
+	return parseExpressionBase({ L'+', L'-' }, Expression::ET_ADDITIVE, std::bind(&ESInterpreter::parseMultiplicativeExpression, this));
 }
 
 std::unique_ptr<Expression> ESInterpreter::parseShiftExpression()
@@ -1320,163 +1429,31 @@ std::unique_ptr<Expression> ESInterpreter::parseShiftExpression()
 
 std::unique_ptr<Expression> ESInterpreter::parseRelationalExpression()
 {
-	auto pExpression = parseShiftExpression();
-
-	if (m_token.type != L'<')
-		return pExpression;
-
-	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_RELATIONAL);
-
-	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
-
-	while (m_token.type == L'<')
-	{
-		pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-		pNewExpression->m_expressionSets.back()->token = m_token;
-		getNextToken();
-		pNewExpression->m_expressionSets.back()->expression = parseShiftExpression();
-	}
-
-	return pNewExpression;
+	return parseExpressionBase({ L'<', TT_LESSEQUAL }, Expression::ET_RELATIONAL, std::bind(&ESInterpreter::parseShiftExpression, this));
 }
 
 std::unique_ptr<Expression> ESInterpreter::parseEqualityExpression()
 {
-	auto pExpression = parseRelationalExpression();
-
-	if (m_token.type != TT_EQUALEQUAL)
-		return pExpression;
-
-	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_EQUALITY);
-
-	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
-
-	while (m_token.type == TT_EQUALEQUAL)
-	{
-		pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-		pNewExpression->m_expressionSets.back()->token = m_token;
-		getNextToken();
-		pNewExpression->m_expressionSets.back()->expression = parseRelationalExpression();
-	}
-
-	return pNewExpression;
-}
-
-std::unique_ptr<Expression> ESInterpreter::parseBitwiseANDExpression()
-{
-	auto pExpression = parseEqualityExpression();
-
-	if (m_token.type != L'&')
-		return pExpression;
-
-	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_BITWISE);
-
-	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
-
-	while (m_token.type == L'&')
-	{
-		pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-		pNewExpression->m_expressionSets.back()->token = m_token;
-		getNextToken();
-		pNewExpression->m_expressionSets.back()->expression = parseEqualityExpression();
-	}
-
-	return pNewExpression;
-}
-
-std::unique_ptr<Expression> ESInterpreter::parseBitwiseXORExpression()
-{
-	auto pExpression = parseBitwiseANDExpression();
-
-	if (m_token.type != L'^')
-		return pExpression;
-
-	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_BITWISE);
-
-	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
-
-	while (m_token.type == L'^')
-	{
-		pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-		pNewExpression->m_expressionSets.back()->token = m_token;
-		getNextToken();
-		pNewExpression->m_expressionSets.back()->expression = parseBitwiseANDExpression();
-	}
-
-	return pNewExpression;
+	return parseExpressionBase({ TT_EQUALEQUAL }, Expression::ET_EQUALITY, std::bind(&ESInterpreter::parseRelationalExpression, this));
 }
 
 std::unique_ptr<Expression> ESInterpreter::parseBinaryBitwiseExpression()
 {
-	auto pExpression = parseBitwiseXORExpression();
-
-	if (m_token.type != L'|')
-		return pExpression;
-
-	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_BITWISE);
-
-	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
-
-	while (m_token.type == L'|')
+	return parseExpressionBase({ L'|' }, Expression::ET_BITWISE, [&]()
 	{
-		pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-		pNewExpression->m_expressionSets.back()->token = m_token;
-		getNextToken();
-		pNewExpression->m_expressionSets.back()->expression = parseBitwiseXORExpression();
-	}
-
-	return pNewExpression;
-}
-
-std::unique_ptr<Expression> ESInterpreter::parseLogicalAndExpression()
-{
-	auto pExpression = parseBinaryBitwiseExpression();
-
-	if (m_token.type != TT_ANDAND)
-		return pExpression;
-
-	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_BINARYLOGICAL);
-
-	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
-
-	while (m_token.type == TT_ANDAND)
-	{
-		pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-		pNewExpression->m_expressionSets.back()->token = m_token;
-		getNextToken();
-		pNewExpression->m_expressionSets.back()->expression = parseBinaryBitwiseExpression();
-	}
-
-	return pNewExpression;
+		return parseExpressionBase({ L'^' }, Expression::ET_BITWISE, [&]()
+		{
+			return parseExpressionBase({ L'&' }, Expression::ET_BITWISE, std::bind(&ESInterpreter::parseEqualityExpression, this));
+		});
+	});
 }
 
 std::unique_ptr<Expression> ESInterpreter::parseBinaryLogicalExpression()
 {
-	auto pExpression = parseLogicalAndExpression();
-
-	if (m_token.type != TT_OROR)
-		return pExpression;
-
-	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_BINARYLOGICAL);
-
-	pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-	pNewExpression->m_expressionSets.back()->expression = std::move(pExpression);
-
-	while (m_token.type == TT_OROR)
+	return parseExpressionBase({ TT_OROR }, Expression::ET_BINARYLOGICAL, [&]()
 	{
-		pNewExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
-		pNewExpression->m_expressionSets.back()->token = m_token;
-		getNextToken();
-		pNewExpression->m_expressionSets.back()->expression = parseLogicalAndExpression();
-	}
-
-	return pNewExpression;
+		return parseExpressionBase({ TT_ANDAND }, Expression::ET_BINARYLOGICAL, std::bind(&ESInterpreter::parseBinaryBitwiseExpression, this));
+	});
 }
 
 std::unique_ptr<Expression> ESInterpreter::parseConditionalExpression()
@@ -1487,7 +1464,7 @@ std::unique_ptr<Expression> ESInterpreter::parseConditionalExpression()
 std::unique_ptr<Expression> ESInterpreter::parseAssignmentExpression()
 {
 	auto pExpression = parseConditionalExpression();
-	if (Expression::ET_LEFTHADSIDE < pExpression->m_type || (m_token.type != L'=' && m_token.type != TT_PLUSEQUAL))
+	if (Expression::ET_LEFTHADSIDE < pExpression->m_type || (m_token.type != L'=' && m_token.type != TT_PLUSEQUAL && m_token.type != TT_OREQUAL && m_token.type != TT_ANDEQUAL))
 		return pExpression;
 
 	auto pNewExpression = std::make_unique<Expression>(this, Expression::ET_ASSIGNMENT);
@@ -1569,10 +1546,38 @@ std::unique_ptr<Statement> ESInterpreter::parseStatement(Object *pVariableEnviro
 
 			return pStatement;
 		}
+		else if (getNextToken(TT_WHILE))
+		{
+			auto pStatement = std::make_unique <Statement>(this, Statement::ST_WHILE, m_line, m_posInLine, m_pCallback);
+
+			getNextToken(L'(', true);
+			pStatement->m_expressions.push_back(parseExpression());
+			getNextToken(L')', true);
+
+			pStatement->m_statements.push_back(parseStatement(pVariableEnvironment));
+
+			return pStatement;
+
+		}
 		else if (getNextToken(TT_BREAK))
 		{
 			getNextToken(L';');
 			return std::make_unique<Statement>(this, Statement::ST_BREAK, m_line, m_posInLine, m_pCallback);
+		}
+		else if (getNextToken(TT_CONTINUE))
+		{
+			getNextToken(L';');
+			return std::make_unique<Statement>(this, Statement::ST_CONTINUE, m_line, m_posInLine, m_pCallback);
+		}
+		else if (getNextToken(TT_RETURN))
+		{
+			auto pStatement = std::make_unique<Statement>(this, Statement::ST_RETURN, m_line, m_posInLine, m_pCallback);
+			if (m_token.type != L';')	// todo no line terminate
+			{
+				pStatement->m_expressions.push_back(parseExpression());
+			}
+			getNextToken(L';');
+			return pStatement;
 		}
 		else if (getNextToken(TT_IF))
 		{
@@ -1653,10 +1658,22 @@ Object* ESInterpreter::getGlobalObject()
 	return m_pGlobalObject;
 }
 
+Value ESInterpreter::parseInt(Object *pThis, std::vector<Value> arguments, void *pUserParam)
+{
+	if (1 <= arguments.size())
+		return (double)arguments[0].toInt32();
+	return Value();
+}
+
 void ESInterpreter::createStandardObject()
 {
 	m_pStandardObject = Object::create();
-	m_pStandardObject->m_pNativeFunction = [](Object *pThis, std::vector<Value>&, void*)
+	m_pStandardObject->m_pNativeCall = [](Object *pThis, std::vector<Value>&, void*)
+	{
+		// todo
+		return Value();
+	};
+	m_pStandardObject->m_pNativeConstructor = [](Object *pThis, std::vector<Value>&, void*)
 	{
 		// todo
 		return Value();
@@ -1669,19 +1686,23 @@ void ESInterpreter::createStandardObject()
 	m_pStandardObjectPrototype->setVariable(L"toString", createFunctionObject([](Object *pThis, std::vector<Value>&, void*)
 	{
 		return Value((L"[object " + pThis->m_class + L"]").c_str());
-	}, nullptr));
+	}, nullptr, nullptr));
 }
 
 void ESInterpreter::createStandardFunctionObject()
 {
-	m_pStandardFunctionObject = Object::create();
-	m_pStandardFunctionObject->m_pNativeFunction = [](Object *pThis, std::vector<Value>&, void*)
+	m_pStandardFunctionObject = createObject();
+	m_pStandardFunctionObject->m_pNativeCall = [](Object *pThis, std::vector<Value>&, void*)
+	{
+		// todo
+		return Value();
+	};
+	m_pStandardFunctionObject->m_pNativeConstructor = [](Object *pThis, std::vector<Value>&, void*)
 	{
 		// todo
 		return Value();
 	};
 	m_pStandardFunctionObject->m_class = L"Function";
-	m_pStandardFunctionObject->m_pPrototype = m_pStandardObjectPrototype;
 
 	m_pStandardFunctionObjectPrototype = createObject();
 	m_pStandardFunctionObject->setVariable(L"prototype", m_pStandardFunctionObjectPrototype);
@@ -1704,10 +1725,11 @@ Object* ESInterpreter::createFunctionObject()
 	return pObject;
 }
 
-Object* ESInterpreter::createFunctionObject(std::function<Value(Object*, std::vector<Value>&, void*)> pNativeFunction, void *pUserParam)
+Object* ESInterpreter::createFunctionObject(std::function<Value(Object*, std::vector<Value>, void*)> pNativeCall, std::function<Value(Object*, std::vector<Value>, void*)> pNativeConstructor, void *pUserParam)
 {
 	Object *pObject = createFunctionObject();
-	pObject->m_pNativeFunction = pNativeFunction;
+	pObject->m_pNativeCall = pNativeCall;
+	pObject->m_pNativeConstructor = pNativeConstructor;
 	pObject->m_pUserParam = pUserParam;
 	return pObject;
 }

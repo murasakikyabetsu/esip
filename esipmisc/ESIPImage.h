@@ -3,23 +3,31 @@
 #include "..\esip\ESInterpreter.h"
 #include <vector>
 
-class ESIPImageAdapter
+class ESIPImage : public NativeObject
 {
 public:
 
-	ESIPImageAdapter();
-	virtual ~ESIPImageAdapter();
+	long m_width;
+	long m_height;
 
-	void operator()(ESInterpreter *pInterpreter, Object *pObject);
+	std::vector<unsigned char> m_data;
 
-	static Value constructor(Object *pThis, std::vector<Value> &arguments, void *pUserParam);
-	static bool setVariable(const wchar_t *pName, const Value &value, void *pUserParam);
-	static bool getVariable(const wchar_t *pName, Value &value, void *pUserParam);
-	static void destroy(void *pUserParam);
+public:
 
-	static Value load(Object *pThis, std::vector<Value> &arguments, void *pUserParam);
-	static Value save(Object *pThis, std::vector<Value> &arguments, void *pUserParam);
-	static Value getPixel(Object *pThis, std::vector<Value> &arguments, void *pUserParam);
-	static Value setPixel(Object *pThis, std::vector<Value> &arguments, void *pUserParam);
+	static Object* createObject(ESInterpreter *pInterpreter);
+
+public:
+
+	ESIPImage(ESInterpreter *pInterpreter);
+	virtual ~ESIPImage();
+
+	Value constructor(Object *pThis, std::vector<Value> arguments);
+	bool setVariable(Object *pThis, const wchar_t *pName, const Value &value);
+	bool getVariable(Object *pThis, const wchar_t *pName, Value &value);
+
+	Value load(Object *pThis, std::vector<Value> arguments);
+	Value save(Object *pThis, std::vector<Value> arguments);
+	Value getPixel(Object *pThis, std::vector<Value> arguments);
+	Value setPixel(Object *pThis, std::vector<Value> arguments);
 };
 

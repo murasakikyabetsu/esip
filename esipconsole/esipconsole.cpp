@@ -7,7 +7,7 @@
 #include <string>
 
 #include "..\esip\ESInterpreter.h"
-#include "..\esip\ESIPObjects.h"
+#include "..\esip\NonStandardObjects.h"
 #include "..\esipmisc\ESIPImage.h"
 #include "Console.h"
 
@@ -28,15 +28,27 @@ std::wstring getReasonText(ESException &e)
 	return L"";
 }
 
+void callback(int line, int linePos)
+{
+#ifdef _DEBUG
+//	::wprintf_s(L"%d\n", line);
+#endif
+}
+
 int _tmain(int argc, _TCHAR* argv[])
 {
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 
-	ESInterpreter ip;
+	ESInterpreter ip(callback);
 
-	Uint8ArrayAdapter()(&ip, ip.getGlobalObject());
-	ESIPImageAdapter()(&ip, ip.getGlobalObject());
-	ConsoleAdapter()(&ip, ip.getGlobalObject());
+	ip.getGlobalObject()->setVariable(L"ArrayBuffer", ArrayBuffer::createObject(&ip));
+	ip.getGlobalObject()->setVariable(L"Uint8Array", Uint8Array::createObject(&ip));
+
+	Object *pESIP = ip.createObject();
+	pESIP->setVariable(L"Image", ESIPImage::createObject(&ip));
+	ip.getGlobalObject()->setVariable(L"ESIP", pESIP);
+
+	ip.getGlobalObject()->setVariable(L"console", Console::createObject(&ip));
 
 	if (1 < argc)
 	{
