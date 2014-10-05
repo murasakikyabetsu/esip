@@ -45,6 +45,26 @@ public:
 
 class Object;
 
+class ObjectPtr
+{
+private:
+
+	Object *m_pObject;
+
+public:
+
+	ObjectPtr();
+	ObjectPtr(Object *pObject);
+	ObjectPtr(const ObjectPtr &pObject);
+	virtual ~ObjectPtr();
+
+	ObjectPtr& operator=(const ObjectPtr &pObject);
+	ObjectPtr& operator=(Object *pObject);
+	Object* operator->();
+	operator bool();
+	operator Object*();
+};
+
 class Value
 {
 public:
@@ -122,6 +142,7 @@ class Object
 public:
 
 	static std::list<std::unique_ptr<Object>> m_objects;
+	static std::list<Object*> m_roots;
 	static Object* create();
 
 private:
@@ -137,13 +158,15 @@ public:
 	void *m_pUserParam;
 
 	std::wstring m_class;	// [[Class]] - Object
-	Object *m_pPrototype;	// [[Prototype]] - Object
+	ObjectPtr m_pPrototype;	// [[Prototype]] - Object
 
 	std::function<Value(Object*, std::vector<Value>, void*)> m_pNativeCall;
 	std::function<Value(Object*, std::vector<Value>, void*)> m_pNativeConstructor;
 
 	FunctionExpression *m_pFunctionBody;											// [[Code]] - Function Object
-	Object *m_pScope;																// [[Scope]] - Function Object
+	ObjectPtr m_pScope;																// [[Scope]] - Function Object
+
+	bool m_marked;
 
 private:
 
@@ -162,6 +185,8 @@ public:
 	Value getVariable(const wchar_t *pName, bool isThis);
 
 	void setCapture(std::function<bool(const wchar_t *pName, const Value &value, void*)> pSetVariable, std::function<bool(const wchar_t *pName, Value &value, void*)> pGetVariable, std::function<void(void*)> pDestroy, void *pUserParam);
+
+	void mark();
 };
 
 class ESInterpreter;
@@ -227,7 +252,7 @@ public:
 
 	std::unique_ptr<Statement> m_pFunctionBody;
 
-	Object *m_pVariableEnvironment;
+	ObjectPtr m_pVariableEnvironment;
 
 public:
 
@@ -369,7 +394,7 @@ public:
 
 private:
 
-	Object *m_pGlobalObject;
+	ObjectPtr m_pGlobalObject;
 
 	const wchar_t *m_pSourceCode;
 	int m_sourcePos;
@@ -382,11 +407,11 @@ private:
 
 	std::vector<std::unique_ptr<Statement>> m_programs;
 
-	Object *m_pStandardObject;
-	Object *m_pStandardObjectPrototype;
+	ObjectPtr m_pStandardObject;
+	ObjectPtr m_pStandardObjectPrototype;
 
-	Object *m_pStandardFunctionObject;
-	Object *m_pStandardFunctionObjectPrototype;
+	ObjectPtr m_pStandardFunctionObject;
+	ObjectPtr m_pStandardFunctionObjectPrototype;
 
 private:
 
@@ -428,6 +453,8 @@ public:
 
 	Value run(const wchar_t *pSourceCode);
 
+	void sweep();
+
 	Object* getGlobalObject();
 	Object* createObject();
 	Object* createFunctionObject(std::function<Value(Object*, std::vector<Value>, void*)> pNativeCall, std::function<Value(Object*, std::vector<Value>, void*)> pNativeConstructor, void *pUserParam);
@@ -441,7 +468,7 @@ public:
 		Value(T::*pConstructor)(Object*, std::vector<Value>) = &T::constructor,
 		Value(*pCall)(ESInterpreter*, Object*, std::vector<Value>) = &NativeObject::call)
 	{
-		Object *pObject = createFunctionObject([=](Object *pThis, std::vector<Value> arguments, void *pUserParam)
+		ObjectPtr pObject = createFunctionObject([=](Object *pThis, std::vector<Value> arguments, void *pUserParam)
 		{
 			ESInterpreter *pInterpreter = (ESInterpreter*)pUserParam;
 
@@ -474,7 +501,7 @@ public:
 
 		pObject->m_class = className;
 
-		for (auto &v : functions)
+		for (const auto &v : functions)
 		{
 			pObject->setVariable(v.first.c_str(), createFunctionObject([=](Object *pThis, std::vector<Value> arguments, void *pUserParam)
 			{
@@ -483,10 +510,10 @@ public:
 			}, nullptr, this));
 		}
 
-		Object *pPrototype = createObject();
-		pObject->setVariable(L"prototype", pPrototype);
+		ObjectPtr pPrototype = createObject();
+		pObject->setVariable(L"prototype", (Object*)pPrototype);
 
-		for (auto &v : prototypeFunctions)
+		for (const auto &v : prototypeFunctions)
 		{
 			pPrototype->setVariable(v.first.c_str(), createFunctionObject([=](Object *pThis, std::vector<Value> arguments, void *pUserParam)
 			{

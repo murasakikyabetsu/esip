@@ -44,9 +44,9 @@ int _tmain(int argc, _TCHAR* argv[])
 	ip.getGlobalObject()->setVariable(L"ArrayBuffer", ArrayBuffer::createObject(&ip));
 	ip.getGlobalObject()->setVariable(L"Uint8Array", Uint8Array::createObject(&ip));
 
-	Object *pESIP = ip.createObject();
+	ObjectPtr pESIP = ip.createObject();
 	pESIP->setVariable(L"Image", ESIPImage::createObject(&ip));
-	ip.getGlobalObject()->setVariable(L"ESIP", pESIP);
+	ip.getGlobalObject()->setVariable(L"ESIP", (Object*)pESIP);
 
 	ip.getGlobalObject()->setVariable(L"console", Console::createObject(&ip));
 

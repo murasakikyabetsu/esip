@@ -38,7 +38,7 @@ Value Uint8Array::constructor(Object *pThis, std::vector<Value> arguments)
 {
 	NativeObject::constructor(pThis, arguments);
 
-	Object *pObject = arguments[0].toObject();
+	ObjectPtr pObject = arguments[0].toObject();
 	if (pObject->m_class != L"ArrayBuffer" || !pObject->m_pUserParam)
 		throw ESException(ESException::R_TYPEERROR);
 

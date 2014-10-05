@@ -16,7 +16,7 @@ Console::~Console()
 
 Object* Console::createObject(ESInterpreter *pInterpreter)
 {
-	Object *pObject = pInterpreter->createNativeObject<Console>(L"Console",
+	ObjectPtr pObject = pInterpreter->createNativeObject<Console>(L"Console",
 	{
 		{
 			L"log", [](ESInterpreter *pInterpreter, Object *pThis, std::vector<Value> arguments)

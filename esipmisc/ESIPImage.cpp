@@ -61,7 +61,7 @@ bool ESIPImage::getVariable(Object *pThis, const wchar_t *pName, Value &value)
 
 	if (::wcscmp(pName, L"buffer") == 0)
 	{
-		Object *pArrayBuffer = m_pInterpreter->getGlobalObject()->getVariable(L"ArrayBuffer", true).toObject();
+		ObjectPtr pArrayBuffer = m_pInterpreter->getGlobalObject()->getVariable(L"ArrayBuffer", true).toObject();
 		if (!pArrayBuffer)
 			throw ESException(ESException::R_REFERENCEERROR, L"ArrayBuffer");
 		value = pArrayBuffer->construct({});
@@ -150,12 +150,12 @@ Value ESIPImage::getPixel(Object *pThis, std::vector<Value> arguments)
 		int y = arguments[1].toInt32();
 		unsigned char *pPos = &m_data[(y * m_width + x) * 3];
 
-		Object *pObject = pImage->m_pInterpreter->createObject();
+		ObjectPtr pObject = pImage->m_pInterpreter->createObject();
 		pObject->setVariable(L"r", (double)pPos[2]);
 		pObject->setVariable(L"g", (double)pPos[1]);
 		pObject->setVariable(L"b", (double)pPos[0]);
 
-		return pObject;
+		return (Object*)pObject;
 	}
 
 	return Value();

@@ -320,8 +320,9 @@ Value Value::operator==(const Value &value) const
 ///////////////////////////////////////
 
 std::list<std::unique_ptr<Object>> Object::m_objects;
+std::list<Object*> Object::m_roots;
 
-Object::Object() : m_pNativeCall(nullptr), m_pNativeConstructor(nullptr), m_pFunctionBody(nullptr), m_pUserParam(nullptr), m_pScope(nullptr), m_pPrototype(nullptr)
+Object::Object() : m_pNativeCall(nullptr), m_pNativeConstructor(nullptr), m_pFunctionBody(nullptr), m_pUserParam(nullptr), m_marked(false)
 {
 
 }
@@ -332,7 +333,7 @@ Object::~Object()
 		m_pDestroy(m_pUserParam);
 
 #ifdef _DEBUG
-//	wprintf_s(L"[Destroyed : 0x%08X]\n", this);
+	::wprintf_s(L"[Destroyed : 0x%08X]\n", this);
 #endif
 }
 
@@ -357,7 +358,7 @@ Object* Object::create()
 	Object::m_objects.push_back(std::move(pObject));
 
 #ifdef _DEBUG
-//	wprintf_s(L"[Created : 0x%08X, Objects : %d]\n", Object::m_objects.back().get(), Object::m_objects.size());
+	::wprintf_s(L"[Created : 0x%08X, Objects : %d]\n", Object::m_objects.back().get(), Object::m_objects.size());
 #endif
 
 	return Object::m_objects.back().get();
@@ -375,7 +376,7 @@ Value Object::call(Object *pThis, std::vector<Value> arguments, bool isConstruct
 
 	// todo argumentsオブジェクト
 
-	Object *pNewScope = Object::create();
+	ObjectPtr pNewScope = Object::create();
 	*pNewScope = *m_pFunctionBody->m_pVariableEnvironment;
 	pNewScope->m_pScope = m_pScope;
 	for (size_t n = 0; n < m_pFunctionBody->m_expressionSets[0]->arguments.size() && n < arguments.size(); n++)
@@ -389,13 +390,13 @@ Value Object::call(Object *pThis, std::vector<Value> arguments, bool isConstruct
 
 Value Object::construct(std::vector<Value> arguments)
 {
-	Object *pObject = Object::create();
+	ObjectPtr pObject = Object::create();
 	pObject->m_class = L"Object";
 	pObject->m_pPrototype = getVariable(L"prototype", true).toObject();
 
 	Value value = call(pObject, std::move(arguments), true);
 
-	return value.m_type == Value::VT_OBJECT ? value : pObject;
+	return value.m_type == Value::VT_OBJECT ? value : (Object*)pObject;
 }
 
 void Object::setVariable(const wchar_t *pName, Value value)
@@ -425,7 +426,7 @@ Value Object::getVariable(const wchar_t *pName, bool isThis)
 
 	if (isThis)
 	{
-		if (m_pPrototype != nullptr)
+		if (m_pPrototype)
 			value = m_pPrototype->getVariable(pName, true);
 
 		value.m_pBase = this;
@@ -433,7 +434,7 @@ Value Object::getVariable(const wchar_t *pName, bool isThis)
 		return value;
 	}
 
-	if (m_pScope != nullptr)
+	if (m_pScope)
 		return m_pScope->getVariable(pName, false);
 
 	value.m_type = Value::VT_INVALID;
@@ -451,7 +452,108 @@ void Object::setCapture(std::function<bool(const wchar_t *pName, const Value &va
 	m_pUserParam = pUserParam;
 }
 
+void Object::mark()
+{
+	if (m_marked)
+		return;
+
+	m_marked = true;
+
+	for (const auto &v : m_variable)
+	{
+		if (v.second.m_type == Value::VT_OBJECT)
+			v.second.toObject()->mark();
+	}
+}
+
 ///////////////////////////////////////
+
+ObjectPtr::ObjectPtr() : m_pObject(nullptr)
+{
+
+}
+
+ObjectPtr::ObjectPtr(Object *pObject) : m_pObject(pObject)
+{
+	if (m_pObject)
+		Object::m_roots.push_back(m_pObject);
+}
+
+ObjectPtr::ObjectPtr(const ObjectPtr &pObject)
+{
+	m_pObject = pObject.m_pObject;
+
+	if (m_pObject)
+		Object::m_roots.push_back(m_pObject);
+}
+
+ObjectPtr::~ObjectPtr()
+{
+	if (Object::m_roots.size() && m_pObject)
+	{
+		auto it = std::find(Object::m_roots.begin(), Object::m_roots.end(), m_pObject);
+		if (it != Object::m_roots.end())
+		{
+			Object::m_roots.erase(it);
+		}
+	}
+}
+
+ObjectPtr& ObjectPtr::operator=(const ObjectPtr &pObject)
+{
+	if (Object::m_roots.size() && m_pObject)
+	{
+		auto it = std::find(Object::m_roots.begin(), Object::m_roots.end(), m_pObject);
+		if (it != Object::m_roots.end())
+		{
+			Object::m_roots.erase(it);
+		}
+	}
+
+	m_pObject = pObject.m_pObject;
+
+	if (m_pObject)
+		Object::m_roots.push_back(m_pObject);
+
+	return *this;
+}
+
+ObjectPtr& ObjectPtr::operator = (Object *pObject)
+{
+	if (Object::m_roots.size() && m_pObject)
+	{
+		auto it = std::find(Object::m_roots.begin(), Object::m_roots.end(), m_pObject);
+		if (it != Object::m_roots.end())
+		{
+			Object::m_roots.erase(it);
+		}
+	}
+
+	m_pObject = pObject;
+
+	if (m_pObject)
+		Object::m_roots.push_back(m_pObject);
+
+	return *this;
+}
+
+Object* ObjectPtr::operator->()
+{
+	return m_pObject;
+}
+
+ObjectPtr::operator bool()
+{
+	return m_pObject != nullptr;
+}
+
+ObjectPtr::operator Object*()
+{
+	return m_pObject;
+}
+
+///////////////////////////////////////
+
 
 Expression::Expression(ESInterpreter *pInterpeter, EXPRESSIONTYPE type) : m_pInterpreter(pInterpeter), m_type(type)
 {
@@ -484,7 +586,7 @@ Value Expression::run(Object *pScope, Object *pThis)
 
 	case ET_OBJECT:
 		{
-			Object *pObject = m_pInterpreter->createObject();
+			ObjectPtr pObject = m_pInterpreter->createObject();
 			for (size_t n = 0; n < m_expressionSets.size(); n += 2)
 			{
 				Value rValue = m_expressionSets[n + 1]->expression->run(pScope, pThis);
@@ -493,7 +595,7 @@ Value Expression::run(Object *pScope, Object *pThis)
 				else
 					pObject->setVariable(m_expressionSets[n]->expression->run(pScope, pThis).toString().c_str(), rValue);
 			}
-			return pObject;
+			return (Object*)pObject;
 		}
 	case ET_ARRAY:
 		{
@@ -501,7 +603,7 @@ Value Expression::run(Object *pScope, Object *pThis)
 
 			value = value.toObject()->construct({ Value((double)m_expressionSets.size()) });
 
-			Object *pArray = value.toObject();
+			ObjectPtr pArray = value.toObject();
 			for (size_t n = 0; n < m_expressionSets.size(); n++)
 			{
 				std::wstringstream buf;
@@ -527,7 +629,8 @@ Value Expression::run(Object *pScope, Object *pThis)
 				arguments.push_back(m_expressionSets[0]->arguments[n]->run(pScope, pThis));
 			}
 
-			return value.toObject()->construct(arguments);
+			ObjectPtr pObject = value.toObject();
+			return pObject->construct(arguments);
 		}
 	case ET_LEFTHADSIDE:
 		{
@@ -535,8 +638,8 @@ Value Expression::run(Object *pScope, Object *pThis)
 
 			for (size_t n = 1; n < m_expressionSets.size(); n++)
 			{
-				Object *pNewThis = value.toObject();
-				if (pNewThis == nullptr)
+				ObjectPtr pNewThis = value.toObject();
+				if (!pNewThis)
 					throw ESException(ESException::R_TYPEERROR, value.m_referenceName.c_str());
 
 				if (m_expressionSets[n]->token.type == L'.')
@@ -559,7 +662,8 @@ Value Expression::run(Object *pScope, Object *pThis)
 						arguments.push_back(m_expressionSets[n]->arguments[a]->run(pScope, pThis));
 					}
 
-					value = value.toObject()->call(pThis, std::move(arguments), false);
+					ObjectPtr pObject = value.toObject();
+					value = pObject->call(pThis, std::move(arguments), false);
 				}
 
 				pThis = pNewThis;
@@ -643,7 +747,7 @@ Value Expression::run(Object *pScope, Object *pThis)
 			Value lValue = m_expressionSets[0]->expression->run(pScope, pThis);
 			Value rValue = m_expressionSets[1]->expression->run(pScope, pThis);
 
-			if (lValue.m_pBase == nullptr)
+			if (!lValue.m_pBase)
 				throw ESException(ESException::R_TYPEERROR);
 
 			Value value;
@@ -814,7 +918,7 @@ void Statement::run(Object *pScope, Object *pThis)
 			break;
 
 		case ST_SOURCEELEMENT:
-			for (auto &statement : m_statements)
+			for (const auto &statement : m_statements)
 			{
 				statement->run(pScope, pThis);
 				m_result = statement->m_result;
@@ -839,15 +943,13 @@ void Statement::run(Object *pScope, Object *pThis)
 
 ESInterpreter::ESInterpreter(void(*pCallback)(int, int))
 	: m_pCallback(pCallback), m_pSourceCode(nullptr), m_sourcePos(0), m_line(1), m_posInLine(1)
-	, m_pStandardObject(nullptr), m_pStandardObjectPrototype(nullptr)
-	, m_pStandardFunctionObject(nullptr), m_pStandardFunctionObjectPrototype(nullptr)
 {
 	createStandardObject();
 	createStandardFunctionObject();
 
 	m_pGlobalObject = Object::create();
-	m_pGlobalObject->setVariable(L"Object", m_pStandardObject);
-	m_pGlobalObject->setVariable(L"Function", m_pStandardFunctionObject);
+	m_pGlobalObject->setVariable(L"Object", (Object*)m_pStandardObject);
+	m_pGlobalObject->setVariable(L"Function", (Object*)m_pStandardFunctionObject);
 	m_pGlobalObject->setVariable(L"parseInt", createFunctionObject(ESInterpreter::parseInt, nullptr, nullptr));
 	m_pGlobalObject->setVariable(L"Date", Date::createObject(this));
 	m_pGlobalObject->setVariable(L"Math", Math::createObject(this));
@@ -1653,6 +1755,27 @@ Value ESInterpreter::run(const wchar_t *pSourceCode)
 	return m_programs.back()->m_result.value;
 }
 
+void ESInterpreter::sweep()
+{
+	for (auto it = Object::m_roots.begin(); it != Object::m_roots.end(); it++)
+	{
+		(*it)->mark();
+	}
+
+	for (auto it = Object::m_objects.begin(); it != Object::m_objects.end();)
+	{
+		if ((*it)->m_marked)
+		{
+			(*it)->m_marked = false;
+			it++;
+		}
+		else
+		{
+			it = Object::m_objects.erase(it);
+		}
+	}
+}
+
 Object* ESInterpreter::getGlobalObject()
 {
 	return m_pGlobalObject;
@@ -1681,7 +1804,7 @@ void ESInterpreter::createStandardObject()
 	m_pStandardObject->m_class = L"Object";
 
 	m_pStandardObjectPrototype = createObject();
-	m_pStandardObject->setVariable(L"prototype", m_pStandardObjectPrototype);
+	m_pStandardObject->setVariable(L"prototype", (Object*)m_pStandardObjectPrototype);
 
 	m_pStandardObjectPrototype->setVariable(L"toString", createFunctionObject([](Object *pThis, std::vector<Value>&, void*)
 	{
@@ -1705,12 +1828,14 @@ void ESInterpreter::createStandardFunctionObject()
 	m_pStandardFunctionObject->m_class = L"Function";
 
 	m_pStandardFunctionObjectPrototype = createObject();
-	m_pStandardFunctionObject->setVariable(L"prototype", m_pStandardFunctionObjectPrototype);
+	m_pStandardFunctionObject->setVariable(L"prototype", (Object*)m_pStandardFunctionObjectPrototype);
 }
 
 Object* ESInterpreter::createObject()
 {
-	Object *pObject = Object::create();
+	sweep();	// todo
+
+	ObjectPtr pObject = Object::create();
 	pObject->m_class = L"Object";
 	pObject->m_pPrototype = m_pStandardObjectPrototype;
 	return pObject;
@@ -1718,7 +1843,7 @@ Object* ESInterpreter::createObject()
 
 Object* ESInterpreter::createFunctionObject()
 {
-	Object *pObject = Object::create();
+	ObjectPtr pObject = Object::create();
 	pObject->m_class = L"Function";
 	pObject->m_pPrototype = m_pStandardFunctionObjectPrototype;
 	pObject->setVariable(L"prototype", createObject());
@@ -1727,7 +1852,7 @@ Object* ESInterpreter::createFunctionObject()
 
 Object* ESInterpreter::createFunctionObject(std::function<Value(Object*, std::vector<Value>, void*)> pNativeCall, std::function<Value(Object*, std::vector<Value>, void*)> pNativeConstructor, void *pUserParam)
 {
-	Object *pObject = createFunctionObject();
+	ObjectPtr pObject = createFunctionObject();
 	pObject->m_pNativeCall = pNativeCall;
 	pObject->m_pNativeConstructor = pNativeConstructor;
 	pObject->m_pUserParam = pUserParam;
@@ -1736,7 +1861,7 @@ Object* ESInterpreter::createFunctionObject(std::function<Value(Object*, std::ve
 
 Object* ESInterpreter::createFunctionObject(FunctionExpression *pExpression, Object *pScope)
 {
-	Object *pObject = createFunctionObject();
+	ObjectPtr pObject = createFunctionObject();
 	pObject->m_pFunctionBody = pExpression;
 	pObject->m_pScope = pScope;
 	return pObject;
