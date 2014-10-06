@@ -130,6 +130,21 @@ var outputField = function (field)
 	console.print("+");
 };
 
+var showExplanation = function ()
+{
+	console.locate(0, height + 3);
+	console.log("E - Up");
+	console.log("S - Left");
+	console.log("F - Right");
+	console.log("C - Down");
+	console.log("");
+	console.log("Z - Open");
+	console.log("X - Flag");
+	console.log("");
+	console.log("A - Retry");
+	console.log("Q - Exit");
+}
+
 var open = function (field, x, y)
 {
 	if (!(field[y][x] & HIDDEN) || (field[y][x] & FLAG))
@@ -157,28 +172,35 @@ var open = function (field, x, y)
 	}
 }
 
-console.cls();
-console.cursor(0);
+var check = function (field)
+{
+	var count = 0;
+	for (var y = 0; y < field.length; y++)
+	{
+		for (var x = 0; x < field[y].length; x++)
+		{
+			if (field[y][x] & HIDDEN)
+				count++;
+			
+			if (field[y][x] == BOM)
+				return 2;
+		}
+	}
+	
+	if (count == boms)
+		return 1;
+	
+	return 0;
+}
 
 var width = 10;
 var height = 10;
 var boms = 10;
 
-var cx = width / 2;
-var cy = height / 2;
+var cx = parseInt(width / 2);
+var cy = parseInt(height / 2);
 
 var field = createField(width, height, boms);
-
-console.locate(0, height + 3);
-console.log("E - Up");
-console.log("S - Left");
-console.log("F - Right");
-console.log("C - Down");
-console.log("");
-console.log("Z - Open");
-console.log("X - Flag");
-console.log("");
-console.log("Q - Exit");
 
 var keyState = {};
 var keyUp = function (keyCode)
@@ -189,31 +211,70 @@ var keyUp = function (keyCode)
 	return keyUp;
 }
 
+console.cursor(0);
+console.cls();
+showExplanation();
+
 var prevTime = (new Date()).getTime();
 
 for (;;)
 {
 	if (keyUp(0x51))
 		break;
-	if (0 < cy && keyUp(0x45))
-		cy--;
-	if (cy < height - 1 && keyUp(0x43))
-		cy++;
-	if (0 < cx && keyUp(0x53))
-		cx--;
-	if (cx < width - 1 && keyUp(0x46))
-		cx++;
-	if (keyUp(0x5A))
-		open(field, cx, cy);
-	if (keyUp(0x58))
+	if (keyUp(0x41))
 	{
-		if (field[cy][cx] & FLAG)
-			field[cy][cx] &= ~FLAG;
-		else if (field[cy][cx] & HIDDEN)
-			field[cy][cx] |= FLAG;
+		field = createField(width, height, boms);
+		console.cls();
+		showExplanation();
+		cx = parseInt(width / 2);
+		cy = parseInt(height / 2);
 	}
 	
-	outputField(field);
+	var ret = check(field);
+	if (ret == 1)
+	{
+		outputField(field);
+		
+		console.locate(width + 4, parseInt(height / 2));
+		console.log("+-------+");
+		console.locate(width + 4, parseInt(height / 2) + 1);
+		console.log("| Clear |");
+		console.locate(width + 4, parseInt(height / 2) + 2);
+		console.log("+-------+");
+	}
+	else if (ret == 2)
+	{
+		outputField(field);
+		
+		console.locate(width + 4, parseInt(height / 2));
+		console.log("+-----------+");
+		console.locate(width + 4, parseInt(height / 2) + 1);
+		console.log("| Game Over |");
+		console.locate(width + 4, parseInt(height / 2) + 2);
+		console.log("+-----------+");
+	}
+	else
+	{
+		if (0 < cy && keyUp(0x45))
+			cy--;
+		if (cy < height - 1 && keyUp(0x43))
+			cy++;
+		if (0 < cx && keyUp(0x53))
+			cx--;
+		if (cx < width - 1 && keyUp(0x46))
+			cx++;
+		if (keyUp(0x5A))
+			open(field, cx, cy);
+		if (keyUp(0x58))
+		{
+			if (field[cy][cx] & FLAG)
+				field[cy][cx] &= ~FLAG;
+			else if (field[cy][cx] & HIDDEN)
+				field[cy][cx] |= FLAG;
+		}
+	
+		outputField(field);
+	}
 	
 	var curTime = (new Date()).getTime();
 	if (curTime - prevTime < 25)

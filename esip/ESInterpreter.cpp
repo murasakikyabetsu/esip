@@ -333,7 +333,7 @@ Object::~Object()
 		m_pDestroy(m_pUserParam);
 
 #ifdef _DEBUG
-	::wprintf_s(L"[Destroyed : 0x%08X]\n", this);
+//	::wprintf_s(L"[Destroyed : 0x%08X]\n", this);
 #endif
 }
 
@@ -358,7 +358,7 @@ Object* Object::create()
 	Object::m_objects.push_back(std::move(pObject));
 
 #ifdef _DEBUG
-	::wprintf_s(L"[Created : 0x%08X, Objects : %d]\n", Object::m_objects.back().get(), Object::m_objects.size());
+//	::wprintf_s(L"[Created : 0x%08X, Objects : %d]\n", Object::m_objects.back().get(), Object::m_objects.size());
 #endif
 
 	return Object::m_objects.back().get();
@@ -1281,19 +1281,21 @@ std::unique_ptr<Expression> ESInterpreter::parsePrimaryExpression(TOKENTYPE requ
 	{
 		return std::make_unique<Expression>(this, Expression::ET_THIS);
 	}
-	else if (getNextToken(TT_TRUE))
+	else if (m_token.type == TT_TRUE)
 	{
 		auto pExpression = std::make_unique<Expression>(this, Expression::ET_BOOLEAN);
 		pExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 		pExpression->m_expressionSets.back()->token = m_token;
+		getNextToken();
 
 		return pExpression;
 	}
-	else if (getNextToken(TT_FALSE))
+	else if (m_token.type == TT_FALSE)
 	{
 		auto pExpression = std::make_unique<Expression>(this, Expression::ET_BOOLEAN);
 		pExpression->m_expressionSets.push_back(std::make_unique<Expression::EXPRESSIONSET>());
 		pExpression->m_expressionSets.back()->token = m_token;
+		getNextToken();
 
 		return pExpression;
 	}

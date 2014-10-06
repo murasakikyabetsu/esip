@@ -1,6 +1,3 @@
-// esipconsole.cpp : コンソール アプリケーションのエントリ ポイントを定義します。
-//
-
 #include "stdafx.h"
 #include <iostream>
 #include <fstream>
