@@ -17,6 +17,11 @@ Object* ArrayBuffer::createObject(ESInterpreter *pInterpreter)
 	return pInterpreter->createNativeObject<ArrayBuffer>(L"ArrayBuffer", {}, {});
 }
 
+void ArrayBuffer::setData(void *pData, size_t dataSize)
+{
+	m_pData = pData;
+	m_dataSize = dataSize;
+}
 
 //////////////////////////////////
 
@@ -56,7 +61,8 @@ bool Uint8Array::setVariable(Object *pThis, const wchar_t *pName, const Value &v
 		if ((long)m_pArrayBuffer->m_dataSize <= index)
 			throw ESException(ESException::R_REFERENCEERROR);	// todo
 
-		m_pArrayBuffer->m_pData[index] = (unsigned char)value.toNumber();
+		unsigned char *pData = (unsigned char*)m_pArrayBuffer->m_pData;
+		pData[index] = (unsigned char)value.toNumber();
 		return true;
 	}
 
@@ -78,7 +84,8 @@ bool Uint8Array::getVariable(Object *pThis, const wchar_t *pName, Value &value)
 		if ((long)m_pArrayBuffer->m_dataSize <= index)
 			throw ESException(ESException::R_REFERENCEERROR);	// todo
 
-		value = (double)m_pArrayBuffer->m_pData[index];
+		unsigned char *pData = (unsigned char*)m_pArrayBuffer->m_pData;
+		value = (double)pData[index];
 		return true;
 	}
 

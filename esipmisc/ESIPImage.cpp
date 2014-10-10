@@ -26,8 +26,14 @@ Object* ESIPImage::createObject(ESInterpreter *pInterpreter)
 
 Value ESIPImage::constructor(Object *pThis, std::vector<Value> arguments)
 {
-	if (1 <= arguments.size())
+	if (1 <= arguments.size() && arguments[0].m_type == Value::VT_STRING)
 		load(pThis, arguments);
+	else if (2 <= arguments.size() && arguments[0].m_type == Value::VT_NUMBER && arguments[1].m_type == Value::VT_NUMBER)
+	{
+		m_width = arguments[0].toInt32();
+		m_height = arguments[1].toInt32();
+		m_data.resize(m_height * m_width * 3);
+	}
 
 	return Value();
 }
@@ -66,8 +72,7 @@ bool ESIPImage::getVariable(Object *pThis, const wchar_t *pName, Value &value)
 			throw ESException(ESException::R_REFERENCEERROR, L"ArrayBuffer");
 		value = pArrayBuffer->construct({});
 		ArrayBuffer *p = static_cast<ArrayBuffer*>(value.toObject()->m_pUserParam);
-		p->m_pData = &m_data[0];
-		p->m_dataSize = m_data.size();
+		p->setData(&m_data[0], m_data.size());
 
 		return true;
 	}
@@ -79,8 +84,6 @@ Value ESIPImage::load(Object *pThis, std::vector<Value> arguments)
 {
 	if (1 <= arguments.size())
 	{
-		// todo
-
 		FILE *f;
 		if (::_wfopen_s(&f, arguments[0].toString().c_str(), L"rb") == 0)
 		{
@@ -93,8 +96,12 @@ Value ESIPImage::load(Object *pThis, std::vector<Value> arguments)
 
 			::fclose(f);
 
-			m_width = *(long*)&buffer[14 + 4];
-			m_height = *(long*)&buffer[14 + 8];
+			BITMAPFILEHEADER *pBFH = (BITMAPFILEHEADER*)&buffer[0];
+			BITMAPINFOHEADER *pBIH = (BITMAPINFOHEADER*)&buffer[sizeof(BITMAPFILEHEADER)];
+			m_width = pBIH->biWidth;
+			m_height = pBIH->biHeight;
+
+			long widthBytes = (m_width * 3 + 3) & (~3);
 
 			if (0 < m_height)
 			{
@@ -102,7 +109,7 @@ Value ESIPImage::load(Object *pThis, std::vector<Value> arguments)
 
 				for (long y = 0; y < m_height; y++)
 				{
-					::memcpy(&m_data[(m_height - y - 1) * m_width * 3], &buffer[*(long*)&buffer[10] + y * ((m_width * 3 + 3) & (~3))], m_width * 3);
+					::memcpy(&m_data[(m_height - y - 1) * m_width * 3], &buffer[pBFH->bfOffBits + y * widthBytes], m_width * 3);
 				}
 			}
 			else
@@ -112,7 +119,7 @@ Value ESIPImage::load(Object *pThis, std::vector<Value> arguments)
 
 				for (long y = 0; y < m_height; y++)
 				{
-					::memcpy(&m_data[y * m_width * 3], &buffer[*(long*)&buffer[10] + y * ((m_width * 3 + 3) & (~3))], m_width * 3);
+					::memcpy(&m_data[y * m_width * 3], &buffer[pBFH->bfOffBits + y * widthBytes], m_width * 3);
 				}
 			}
 		}
@@ -127,12 +134,32 @@ Value ESIPImage::save(Object *pThis, std::vector<Value> arguments)
 
 	if (1 <= arguments.size())
 	{
-		// todo
+		long widthBytes = (m_width * 3 + 3) & (~3);
+
+		BITMAPFILEHEADER bfh = {0};
+		bfh.bfType = 'MB';
+		bfh.bfSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + m_height * widthBytes;
+		bfh.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+
+		BITMAPINFOHEADER bih = {0};
+		bih.biSize = sizeof(bih);
+		bih.biWidth = m_width;
+		bih.biHeight = m_height;
+		bih.biPlanes = 1;
+		bih.biBitCount = 24;
+		bih.biSizeImage = m_height * widthBytes;
 
 		FILE *f;
 		if (::_wfopen_s(&f, arguments[0].toString().c_str(), L"wb") == 0)
 		{
-			::fwrite(&m_data[0], 1, m_data.size(), f);
+			::fwrite(&bfh, 1, sizeof(bfh), f);
+			::fwrite(&bih, 1, sizeof(bih), f);
+			for (long y = m_height - 1; 0 <= y; y--)
+			{
+				::fwrite(&m_data[y * m_width * 3], 1, m_width * 3, f);
+				char dummy[4] = { 0 };
+				::fwrite(dummy, 1, widthBytes - m_width * 3, f);
+			}
 			::fclose(f);
 		}
 	}
@@ -177,4 +204,14 @@ Value ESIPImage::setPixel(Object *pThis, std::vector<Value> arguments)
 	}
 
 	return Value();
+}
+
+long ESIPImage::getWidth()
+{
+	return m_width;
+}
+
+long ESIPImage::getHeight()
+{
+	return m_height;
 }

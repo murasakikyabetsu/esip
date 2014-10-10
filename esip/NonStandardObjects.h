@@ -7,7 +7,7 @@ class ArrayBuffer : public NativeObject
 {
 public:
 
-	unsigned char *m_pData;
+	void *m_pData;
 	size_t m_dataSize;
 
 public:
@@ -18,6 +18,8 @@ public:
 
 	ArrayBuffer(ESInterpreter *pInterpreter);
 	virtual ~ArrayBuffer();
+
+	void setData(void *pData, size_t dataSize);
 
 };
 

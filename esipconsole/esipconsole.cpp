@@ -46,6 +46,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	ip.getGlobalObject()->setVariable(L"ESIP", (Object*)pESIP);
 
 	ip.getGlobalObject()->setVariable(L"console", Console::createObject(&ip));
+	ip.getGlobalObject()->setVariable(L"Window", Window::createObject(&ip));
 
 	if (1 < argc)
 	{
