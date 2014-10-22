@@ -8,6 +8,10 @@
 #include <functional>
 #include <map>
 
+class Object;
+class ESInterpreter;
+class FunctionExpression;
+
 typedef struct tagTOKEN
 {
 	int type;
@@ -24,6 +28,7 @@ public:
 
 	enum REASON
 	{
+		R_NOERROR,
 		R_SYNTAXERROR,
 		R_REFERENCEERROR,
 		R_TYPEERROR,
@@ -39,17 +44,16 @@ public:
 
 public:
 
-	ESException(REASON reason, const wchar_t *pInformation = nullptr, int line = 0, int posInLine = 0);
+	ESException(REASON reason = R_NOERROR, const wchar_t *pInformation = nullptr, int line = 0, int posInLine = 0);
 	virtual ~ESException();
 };
-
-class Object;
 
 class ObjectPtr
 {
 private:
 
 	Object *m_pObject;
+	ESInterpreter *m_pInterpreter;
 
 public:
 
@@ -61,6 +65,7 @@ public:
 	ObjectPtr& operator=(const ObjectPtr &pObject);
 	ObjectPtr& operator=(Object *pObject);
 	Object* operator->();
+	bool operator==(const ObjectPtr &pObject);
 	operator bool();
 	operator Object*();
 };
@@ -135,15 +140,10 @@ public:
 
 };
 
-class FunctionExpression;
-
 class Object
 {
-public:
-
-	static std::list<std::unique_ptr<Object>> m_objects;
-	static std::list<Object*> m_roots;
-	static Object* create();
+	friend class ESInterpreter;
+	friend class ObjectPtr;
 
 private:
 
@@ -152,6 +152,8 @@ private:
 	std::function<void(void*)> m_pDestroy;
 
 public:
+
+	ESInterpreter *m_pInterpreter;
 
 	std::unordered_map<std::wstring, Value> m_variable;
 
@@ -170,7 +172,7 @@ public:
 
 private:
 
-	Object();
+	Object(ESInterpreter *pInterpreter);
 
 public:
 
@@ -181,6 +183,8 @@ public:
 	Value call(Object *pThis, std::vector<Value> arguments, bool isConstruct);	// [[Call]] - Function Object
 	Value construct(std::vector<Value> arguments);								// [[Construct]] - Function Object
 
+	bool hasInstance(Object *pObject);											// [[HasInstance]] - Function Object
+
 	void setVariable(const wchar_t *pName, Value value);
 	Value getVariable(const wchar_t *pName, bool isThis);
 
@@ -188,8 +192,6 @@ public:
 
 	void mark();
 };
-
-class ESInterpreter;
 
 class Expression
 {
@@ -323,6 +325,7 @@ class NativeObject
 protected:
 
 	ESInterpreter *m_pInterpreter;
+	ObjectPtr m_pThis;
 
 public:
 
@@ -335,20 +338,20 @@ public:
 
 public:
 
-	NativeObject(ESInterpreter *pInterpreter) : m_pInterpreter(pInterpreter){}
+	NativeObject(ESInterpreter *pInterpreter, ObjectPtr pThis) : m_pInterpreter(pInterpreter), m_pThis(pThis) {}
 	virtual ~NativeObject() {}
 
-	virtual Value constructor(Object *pThis, std::vector<Value> arguments)
+	virtual Value constructor(std::vector<Value> arguments)
 	{
 		return Value();
 	}
 
-	virtual bool setVariable(Object *pThis, const wchar_t *pName, const Value &value)
+	virtual bool setVariable(const wchar_t *pName, const Value &value)
 	{
 		return false;
 	}
 
-	virtual bool getVariable(Object *pThis, const wchar_t *pName, Value &value)
+	virtual bool getVariable(const wchar_t *pName, Value &value)
 	{
 		return false;
 	}
@@ -356,6 +359,8 @@ public:
 
 class ESInterpreter
 {
+	friend class ObjectPtr;
+
 public:
 
 	enum TOKENTYPE
@@ -394,8 +399,6 @@ public:
 
 private:
 
-	ObjectPtr m_pGlobalObject;
-
 	const wchar_t *m_pSourceCode;
 	int m_sourcePos;
 	int m_line;
@@ -407,11 +410,16 @@ private:
 
 	std::vector<std::unique_ptr<Statement>> m_programs;
 
+	ObjectPtr m_pGlobalObject;
+
 	ObjectPtr m_pStandardObject;
 	ObjectPtr m_pStandardObjectPrototype;
 
 	ObjectPtr m_pStandardFunctionObject;
 	ObjectPtr m_pStandardFunctionObjectPrototype;
+
+	std::list<std::unique_ptr<Object>> m_objects;
+	std::list<Object*> m_roots;
 
 private:
 
@@ -464,8 +472,8 @@ public:
 	Object* createNativeObject(
 		std::wstring className,
 		std::map<std::wstring, Value(*)(ESInterpreter*, Object*, std::vector<Value>)> functions,
-		std::map<std::wstring, Value(T::*)(Object*, std::vector<Value>)> prototypeFunctions,
-		Value(T::*pConstructor)(Object*, std::vector<Value>) = &T::constructor,
+		std::map<std::wstring, Value(T::*)(std::vector<Value>)> prototypeFunctions,
+		Value(T::*pConstructor)(std::vector<Value>) = &T::constructor,
 		Value(*pCall)(ESInterpreter*, Object*, std::vector<Value>) = &NativeObject::call)
 	{
 		ObjectPtr pObject = createFunctionObject([=](Object *pThis, std::vector<Value> arguments, void *pUserParam)
@@ -478,16 +486,16 @@ public:
 		{
 			ESInterpreter *pInterpreter = (ESInterpreter*)pUserParam;
 
-			T *p = new T(pInterpreter);
+			T *p = new T(pInterpreter, pThis);
 
 			pThis->setCapture([=](const wchar_t *pName, const Value &value, void *pUserParam)
 			{
 				T *p = static_cast<T*>(pUserParam);
-				return p->setVariable(pThis, pName, value);
+				return p->setVariable(pName, value);
 			}, [=](const wchar_t *pName, Value &value, void *pUserParam)
 			{
 				T *p = static_cast<T*>(pUserParam);
-				return p->getVariable(pThis, pName, value);
+				return p->getVariable(pName, value);
 			}, [](void *pUserParam)
 			{
 				T *p = static_cast<T*>(pUserParam);
@@ -495,7 +503,7 @@ public:
 			}, p);
 			pThis->m_class = className;
 
-			return (p->*pConstructor)(pThis, arguments);
+			return (p->*pConstructor)(arguments);
 
 		}, this);
 
@@ -522,7 +530,7 @@ public:
 				if (pThis->m_class != className || !p)
 					throw ESException(ESException::R_TYPEERROR, (L"not " + className).c_str());
 
-				return (p->*v.second)(pThis, arguments);
+				return (p->*v.second)(arguments);
 			}, nullptr, nullptr));
 		}
 

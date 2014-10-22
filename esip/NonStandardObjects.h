@@ -16,7 +16,7 @@ public:
 
 public:
 
-	ArrayBuffer(ESInterpreter *pInterpreter);
+	ArrayBuffer(ESInterpreter *pInterpreter, ObjectPtr pThis);
 	virtual ~ArrayBuffer();
 
 	void setData(void *pData, size_t dataSize);
@@ -35,12 +35,12 @@ public:
 
 public:
 
-	Uint8Array(ESInterpreter *pInterpreter);
+	Uint8Array(ESInterpreter *pInterpreter, ObjectPtr pThis);
 	virtual ~Uint8Array();
 
-	Value constructor(Object *pThis, std::vector<Value> arguments);
+	Value constructor(std::vector<Value> arguments);
 
-	bool setVariable(Object *pThis, const wchar_t *pName, const Value &value);
-	bool getVariable(Object *pThis, const wchar_t *pName, Value &value);
+	bool setVariable(const wchar_t *pName, const Value &value);
+	bool getVariable(const wchar_t *pName, Value &value);
 
 };

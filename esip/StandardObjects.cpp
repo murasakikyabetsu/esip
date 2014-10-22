@@ -4,6 +4,7 @@
 #include <time.h>
 #include <sstream>
 #include <iomanip>
+#include <algorithm>
 
 Object* Math::createObject(ESInterpreter *pInterpreter)
 {
@@ -34,23 +35,23 @@ Object* Array::createObject(ESInterpreter *pInterpreter)
 	});
 }
 
-bool Array::setVariable(Object *pThis, const wchar_t *pName, const Value &value)
+bool Array::setVariable(const wchar_t *pName, const Value &value)
 {
 	if (::iswdigit(*pName))
 	{
 		int index = ::_wtol(pName);
-		if (pThis->getVariable(L"length", true).toInt32() <= index)
-			pThis->setVariable(L"length", (double)(index + 1));
+		if (m_pThis->getVariable(L"length", true).toInt32() <= index)
+			m_pThis->setVariable(L"length", (double)(index + 1));
 	}
 
 	return false;
 }
 
-Value Array::constructor(Object *pThis, std::vector<Value> arguments)
+Value Array::constructor(std::vector<Value> arguments)
 {
 	if (arguments.size() == 1 && arguments[0].m_type == Value::VT_NUMBER)
 	{
-		pThis->setVariable(L"length", arguments[0]);
+		m_pThis->setVariable(L"length", arguments[0]);
 	}
 	else if (0 < arguments.size())
 	{
@@ -58,20 +59,20 @@ Value Array::constructor(Object *pThis, std::vector<Value> arguments)
 		{
 			std::wstringstream buffer;
 			buffer << n;
-			pThis->setVariable(buffer.str().c_str(), std::move(arguments[n]));
+			m_pThis->setVariable(buffer.str().c_str(), std::move(arguments[n]));
 		}
 	}
 
 	return Value();
 }
 
-Value Array::join(Object *pThis, std::vector<Value> arguments)
+Value Array::join(std::vector<Value> arguments)
 {
 	std::wstring separator = L",";
 	if (1 <= arguments.size())
 		separator = arguments[0].toString();
 
-	int length = pThis->getVariable(L"length", true).toInt32();
+	int length = m_pThis->getVariable(L"length", true).toInt32();
 
 	std::wstringstream buffer;
 	for (int n = 0; n < length; n++)
@@ -82,15 +83,15 @@ Value Array::join(Object *pThis, std::vector<Value> arguments)
 		std::wstringstream id;
 		id << n;
 
-		buffer << pThis->getVariable(id.str().c_str(), true).toString();
+		buffer << m_pThis->getVariable(id.str().c_str(), true).toString();
 	}
 
 	return buffer.str().c_str();
 }
 
-Value Array::toString(Object *pThis, std::vector<Value> arguments)
+Value Array::toString(std::vector<Value> arguments)
 {
-	return join(pThis, { Value(L",") });
+	return join({ Value(L",") });
 }
 
 
@@ -123,19 +124,19 @@ Object* Date::createObject(ESInterpreter *pInterpreter)
 	});
 }
 
-Value Date::constructor(Object *pThis, std::vector<Value> arguments)
+Value Date::constructor(std::vector<Value> arguments)
 {
 	m_time = std::chrono::system_clock::now();
 	return Value();
 }
 
-Value Date::getTime(Object *pThis, std::vector<Value> arguments)
+Value Date::getTime(std::vector<Value> arguments)
 {
 	auto d = m_time.time_since_epoch();
 	return (double)std::chrono::duration_cast<std::chrono::milliseconds>(d).count();
 }
 
-Value Date::toString(Object *pThis, std::vector<Value> arguments)
+Value Date::toString(std::vector<Value> arguments)
 {
 	__time64_t time = std::chrono::system_clock::to_time_t(m_time);
 	tm local;
@@ -149,4 +150,70 @@ Value Date::toString(Object *pThis, std::vector<Value> arguments)
 		<< std::setfill(L'0') << std::setw(2) << std::right << local.tm_min << L":"
 		<< std::setfill(L'0') << std::setw(2) << std::right << local.tm_sec;
 	return buffer.str().c_str();
+}
+
+///////////////////////////////////////////////////////
+
+Object* String::createObject(ESInterpreter *pInterpreter)
+{
+	return pInterpreter->createNativeObject<String>(L"String", {},
+	{
+		{ L"lastIndexOf", &String::lastIndexOf },
+		{ L"substring", &String::substring },
+		{ L"toString", &String::toString }
+	},
+	&String::constructor, [](ESInterpreter *pInterpreter, Object *pThis, std::vector<Value> arguments)
+	{
+		if (0 < arguments.size())
+			return Value(arguments[0].toString().c_str());
+
+		return Value(L"");
+	});
+}
+
+Value String::constructor(std::vector<Value> arguments)
+{
+	if (0 < arguments.size())
+		m_str = arguments[0].toString();
+
+	return Value();
+}
+
+Value String::lastIndexOf(std::vector<Value> arguments)
+{
+	auto pos = std::wstring::npos;
+	if (1 < arguments.size())
+		pos = arguments[1].toInt32();
+	if (0 < arguments.size())
+		pos = m_str.find_last_of(arguments[0].toString().c_str(), pos);
+
+	if (pos == std::wstring::npos)
+		return (double)-1;
+
+	return (double)pos;
+}
+
+Value String::substring(std::vector<Value> arguments)
+{
+	size_t len = m_str.size();
+
+	size_t intStart = 0;
+	if (0 < arguments.size())
+		intStart = arguments[0].toInt32();
+	size_t intEnd = len;
+	if (1 < arguments.size())
+		intEnd = arguments[1].toInt32();
+
+	size_t finalStart = std::min(std::max<size_t>(intStart, 0), len);
+	size_t finalEnd = std::min(std::max<size_t>(intEnd, 0), len);
+
+	size_t from = std::min(finalStart, finalEnd);
+	size_t to = std::max(finalStart, finalEnd);
+
+	return m_str.substr(from, to - from).c_str();
+}
+
+Value String::toString(std::vector<Value> arguments)
+{
+	return m_str.c_str();
 }

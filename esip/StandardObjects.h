@@ -14,7 +14,7 @@ public:
 
 public:
 
-	Math(ESInterpreter *pInterpreter) : NativeObject(pInterpreter) {}
+	Math(ESInterpreter *pInterpreter, ObjectPtr pThis) : NativeObject(pInterpreter, pThis) {}
 	virtual ~Math() {}
 
 };
@@ -27,14 +27,14 @@ public:
 
 public:
 
-	Array(ESInterpreter *pInterpreter) : NativeObject(pInterpreter) {}
+	Array(ESInterpreter *pInterpreter, ObjectPtr pThis) : NativeObject(pInterpreter, pThis) {}
 	virtual ~Array() {}
 
-	virtual bool setVariable(Object *pThis, const wchar_t *pName, const Value &value);
+	virtual bool setVariable(const wchar_t *pName, const Value &value);
 
-	Value constructor(Object *pThis, std::vector<Value> arguments);
-	Value join(Object *pThis, std::vector<Value> arguments);
-	Value toString(Object *pThis, std::vector<Value> arguments);
+	Value constructor(std::vector<Value> arguments);
+	Value join(std::vector<Value> arguments);
+	Value toString(std::vector<Value> arguments);
 
 };
 
@@ -50,10 +50,31 @@ public:
 
 public:
 
-	Date(ESInterpreter *pInterpreter) : NativeObject(pInterpreter) {}
+	Date(ESInterpreter *pInterpreter, ObjectPtr pThis) : NativeObject(pInterpreter, pThis) {}
 	virtual ~Date() {}
 
-	Value constructor(Object *pThis, std::vector<Value> arguments);
-	Value getTime(Object *pThis, std::vector<Value> arguments);
-	Value toString(Object *pThis, std::vector<Value> arguments);
+	Value constructor(std::vector<Value> arguments);
+	Value getTime(std::vector<Value> arguments);
+	Value toString(std::vector<Value> arguments);
+};
+
+class String : public NativeObject
+{
+private:
+
+	std::wstring m_str;
+
+public:
+
+	static Object* createObject(ESInterpreter *pInterpreter);
+
+public:
+
+	String(ESInterpreter *pInterpreter, ObjectPtr pThis) : NativeObject(pInterpreter, pThis) {}
+	virtual ~String() {}
+
+	Value constructor(std::vector<Value> arguments);
+	Value lastIndexOf(std::vector<Value> arguments);
+	Value substring(std::vector<Value> arguments);
+	Value toString(std::vector<Value> arguments);
 };

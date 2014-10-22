@@ -15,7 +15,7 @@ public:
 
 public:
 
-	Console(ESInterpreter *pInterpreter);
+	Console(ESInterpreter *pInterpreter, ObjectPtr pThis);
 	virtual ~Console();
 
 };
@@ -24,9 +24,16 @@ class Window : public NativeObject
 {
 protected:
 
-	static const wchar_t className[];
+	static const wchar_t CLASSNAME[];
 
 	std::thread m_thread;
+
+	ObjectPtr m_pClickHandler;
+	ObjectPtr m_pCloseHandler;
+
+	static ESException m_exception;
+
+public:
 
 	HWND m_wnd;
 
@@ -36,16 +43,26 @@ public:
 
 	static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+	static bool proc();
+	static void exit();
+
 protected:
 
 	virtual LRESULT WndProc(UINT msg, WPARAM wParam, LPARAM lParam);
 
+	virtual LRESULT commandHandler(int action);
+
+	virtual void createWindow(std::wstring className, std::vector<Value> arguments);
+
 public:
 
-	Window(ESInterpreter *pInterpreter);
+	Window(ESInterpreter *pInterpreter, ObjectPtr pThis);
 	virtual ~Window();
 
-	virtual Value constructor(Object *pThis, std::vector<Value> arguments);
+	virtual bool setVariable(const wchar_t *pName, const Value &value);
+
+	virtual Value constructor(std::vector<Value> arguments);
+	virtual Value appendChild(std::vector<Value> arguments);
 
 };
 
@@ -69,11 +86,29 @@ protected:
 
 public:
 
-	ImageWindow(ESInterpreter *pInterpreter);
+	ImageWindow(ESInterpreter *pInterpreter, ObjectPtr pThis);
 	virtual ~ImageWindow();
 
-	virtual bool setVariable(Object *pThis, const wchar_t *pName, const Value &value);
+	virtual bool setVariable(const wchar_t *pName, const Value &value);
 
-	virtual Value constructor(Object *pThis, std::vector<Value> arguments);
+	virtual Value constructor(std::vector<Value> arguments);
 
+};
+
+class Button : public Window
+{
+public:
+
+	static Object* createObject(ESInterpreter *pInterpreter);
+
+protected:
+
+	virtual LRESULT commandHandler(int action);
+
+public:
+
+	Button(ESInterpreter *pInterpreter, ObjectPtr pThis);
+	virtual ~Button();
+
+	virtual Value constructor(std::vector<Value> arguments);
 };

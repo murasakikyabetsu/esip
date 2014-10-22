@@ -62,7 +62,7 @@ var createField = function (width, height, boms)
 
 var outputField = function (field)
 {
-	console.color(console.R | console.G | console.B | console.I);
+	console.color = console.R | console.G | console.B | console.I;
 	console.locate(0, 0);
 	console.print("+");
 	for (var x = 0; x < field[0].length; x++)
@@ -74,7 +74,7 @@ var outputField = function (field)
 	for (var y = 0; y < field.length; y++)
 	{
 		console.locate(0, y + 1);
-		console.color(console.R | console.G | console.B | console.I);
+		console.color = console.R | console.G | console.B | console.I;
 		console.print("|");
 		
 		for (var x = 0; x < field[y].length; x++)
@@ -82,45 +82,45 @@ var outputField = function (field)
 			console.locate(x + 1, y + 1);
 			if (x == cx && y ==cy)
 			{
-				console.color(console.G | console.I);
+				console.color = console.G | console.I;
 				console.print("@");
 			}
 			else if (field[y][x] & FLAG)
 			{
-				console.color(console.R | console.G | console.I);
+				console.color = console.R | console.G | console.I;
 				console.print("P");
 			}
 			else if (field[y][x] & HIDDEN)
 			{
-				console.color(console.R | console.G | console.B | console.I);
+				console.color = console.R | console.G | console.B | console.I;
 				console.print("?");
 			}
 			else
 			{
 				if (field[y][x] == BOM)
 				{
-					console.color(console.R | console.I);
+					console.color = console.R | console.I;
 					console.print("*");
 				}
 				else if (field[y][x] == 0)
 				{
-					console.color(console.R | console.G | console.B | console.I);
+					console.color = console.R | console.G | console.B | console.I;
 					console.print(" ");
 				}
 				else
 				{
-					console.color(console.B | console.I);
+					console.color = console.B | console.I;
 					console.print(field[y][x]);
 				}
 			}
 		}
 		
 		console.locate(width + 1, y + 1);
-		console.color(console.R | console.G | console.B | console.I);
+		console.color = console.R | console.G | console.B | console.I;
 		console.print("|");
 	}
 
-	console.color(console.R | console.G | console.B | console.I);
+	console.color = console.R | console.G | console.B | console.I;
 	console.locate(0, height + 1);
 	console.print("+");
 	for (var x = 0; x < field[0].length; x++)
@@ -211,7 +211,7 @@ var keyUp = function (keyCode)
 	return keyUp;
 }
 
-console.cursor(0);
+console.cursor = false;
 console.cls();
 showExplanation();
 

@@ -3,7 +3,7 @@
 
 #include "..\esip\NonStandardObjects.h"
 
-ESIPImage::ESIPImage(ESInterpreter *pInterpreter) : NativeObject(pInterpreter)
+ESIPImage::ESIPImage(ESInterpreter *pInterpreter, ObjectPtr pThis) : NativeObject(pInterpreter, pThis)
 {
 }
 
@@ -24,10 +24,10 @@ Object* ESIPImage::createObject(ESInterpreter *pInterpreter)
 	});
 }
 
-Value ESIPImage::constructor(Object *pThis, std::vector<Value> arguments)
+Value ESIPImage::constructor(std::vector<Value> arguments)
 {
 	if (1 <= arguments.size() && arguments[0].m_type == Value::VT_STRING)
-		load(pThis, arguments);
+		load(arguments);
 	else if (2 <= arguments.size() && arguments[0].m_type == Value::VT_NUMBER && arguments[1].m_type == Value::VT_NUMBER)
 	{
 		m_width = arguments[0].toInt32();
@@ -38,7 +38,7 @@ Value ESIPImage::constructor(Object *pThis, std::vector<Value> arguments)
 	return Value();
 }
 
-bool ESIPImage::setVariable(Object *pThis, const wchar_t *pName, const Value &value)
+bool ESIPImage::setVariable(const wchar_t *pName, const Value &value)
 {
 	if (::wcscmp(pName, L"width") == 0 ||
 		::wcscmp(pName, L"height") == 0 ||
@@ -51,7 +51,7 @@ bool ESIPImage::setVariable(Object *pThis, const wchar_t *pName, const Value &va
 	return false;
 }
 
-bool ESIPImage::getVariable(Object *pThis, const wchar_t *pName, Value &value)
+bool ESIPImage::getVariable(const wchar_t *pName, Value &value)
 {
 	if (::wcscmp(pName, L"width") == 0)
 	{
@@ -80,7 +80,7 @@ bool ESIPImage::getVariable(Object *pThis, const wchar_t *pName, Value &value)
 	return false;
 }
 
-Value ESIPImage::load(Object *pThis, std::vector<Value> arguments)
+Value ESIPImage::load(std::vector<Value> arguments)
 {
 	if (1 <= arguments.size())
 	{
@@ -128,10 +128,8 @@ Value ESIPImage::load(Object *pThis, std::vector<Value> arguments)
 	return Value();
 }
 
-Value ESIPImage::save(Object *pThis, std::vector<Value> arguments)
+Value ESIPImage::save(std::vector<Value> arguments)
 {
-	ESIPImage *pImage = static_cast<ESIPImage*>(pThis->m_pUserParam);
-
 	if (1 <= arguments.size())
 	{
 		long widthBytes = (m_width * 3 + 3) & (~3);
@@ -167,17 +165,15 @@ Value ESIPImage::save(Object *pThis, std::vector<Value> arguments)
 	return Value();
 }
 
-Value ESIPImage::getPixel(Object *pThis, std::vector<Value> arguments)
+Value ESIPImage::getPixel(std::vector<Value> arguments)
 {
-	ESIPImage *pImage = static_cast<ESIPImage*>(pThis->m_pUserParam);
-
 	if (2 <= arguments.size())
 	{
 		int x = arguments[0].toInt32();
 		int y = arguments[1].toInt32();
 		unsigned char *pPos = &m_data[(y * m_width + x) * 3];
 
-		ObjectPtr pObject = pImage->m_pInterpreter->createObject();
+		ObjectPtr pObject = m_pInterpreter->createObject();
 		pObject->setVariable(L"r", (double)pPos[2]);
 		pObject->setVariable(L"g", (double)pPos[1]);
 		pObject->setVariable(L"b", (double)pPos[0]);
@@ -188,19 +184,21 @@ Value ESIPImage::getPixel(Object *pThis, std::vector<Value> arguments)
 	return Value();
 }
 
-Value ESIPImage::setPixel(Object *pThis, std::vector<Value> arguments)
+Value ESIPImage::setPixel(std::vector<Value> arguments)
 {
-	ESIPImage *pImage = static_cast<ESIPImage*>(pThis->m_pUserParam);
-
 	if (5 <= arguments.size())
 	{
 		int x = arguments[0].toInt32();
 		int y = arguments[1].toInt32();
 		unsigned char *pPos = &m_data[(y * m_width + x) * 3];
 
-		pPos[0] = (unsigned char)arguments[4].toNumber();
-		pPos[1] = (unsigned char)arguments[3].toNumber();
-		pPos[2] = (unsigned char)arguments[2].toNumber();
+		int r = arguments[2].toInt32();
+		int g = arguments[3].toInt32();
+		int b = arguments[4].toInt32();
+
+		pPos[0] = b < 0 ? 0 : 255 < b ? 255 : (unsigned char)b;
+		pPos[1] = g < 0 ? 0 : 255 < g ? 255 : (unsigned char)g;
+		pPos[2] = r < 0 ? 0 : 255 < r ? 255 : (unsigned char)r;
 	}
 
 	return Value();

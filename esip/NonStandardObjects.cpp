@@ -2,7 +2,7 @@
 #include "NonStandardObjects.h"
 
 
-ArrayBuffer::ArrayBuffer(ESInterpreter *pInterpreter) : NativeObject(pInterpreter), m_pData(nullptr), m_dataSize(0)
+ArrayBuffer::ArrayBuffer(ESInterpreter *pInterpreter, ObjectPtr pThis) : NativeObject(pInterpreter, pThis), m_pData(nullptr), m_dataSize(0)
 {
 
 }
@@ -26,7 +26,7 @@ void ArrayBuffer::setData(void *pData, size_t dataSize)
 //////////////////////////////////
 
 
-Uint8Array::Uint8Array(ESInterpreter *pInterpreter) : NativeObject(pInterpreter), m_pArrayBuffer(nullptr)
+Uint8Array::Uint8Array(ESInterpreter *pInterpreter, ObjectPtr pThis) : NativeObject(pInterpreter, pThis), m_pArrayBuffer(nullptr)
 {
 }
 
@@ -39,10 +39,8 @@ Object* Uint8Array::createObject(ESInterpreter *pInterpreter)
 	return pInterpreter->createNativeObject<Uint8Array>(L"Uint8Array", {}, {});
 }
 
-Value Uint8Array::constructor(Object *pThis, std::vector<Value> arguments)
+Value Uint8Array::constructor(std::vector<Value> arguments)
 {
-	NativeObject::constructor(pThis, arguments);
-
 	ObjectPtr pObject = arguments[0].toObject();
 	if (pObject->m_class != L"ArrayBuffer" || !pObject->m_pUserParam)
 		throw ESException(ESException::R_TYPEERROR);
@@ -52,7 +50,7 @@ Value Uint8Array::constructor(Object *pThis, std::vector<Value> arguments)
 	return Value();
 }
 
-bool Uint8Array::setVariable(Object *pThis, const wchar_t *pName, const Value &value)
+bool Uint8Array::setVariable(const wchar_t *pName, const Value &value)
 {
 	if (::iswdigit(*pName))
 	{
@@ -75,7 +73,7 @@ bool Uint8Array::setVariable(Object *pThis, const wchar_t *pName, const Value &v
 	return false;
 }
 
-bool Uint8Array::getVariable(Object *pThis, const wchar_t *pName, Value &value)
+bool Uint8Array::getVariable(const wchar_t *pName, Value &value)
 {
 	if (::iswdigit(*pName))
 	{

@@ -48,17 +48,17 @@ public:
 
 public:
 
-	ESIPImage(ESInterpreter *pInterpreter);
+	ESIPImage(ESInterpreter *pInterpreter, ObjectPtr pThis);
 	virtual ~ESIPImage();
 
-	Value constructor(Object *pThis, std::vector<Value> arguments);
-	bool setVariable(Object *pThis, const wchar_t *pName, const Value &value);
-	bool getVariable(Object *pThis, const wchar_t *pName, Value &value);
+	Value constructor(std::vector<Value> arguments);
+	bool setVariable(const wchar_t *pName, const Value &value);
+	bool getVariable(const wchar_t *pName, Value &value);
 
-	Value load(Object *pThis, std::vector<Value> arguments);
-	Value save(Object *pThis, std::vector<Value> arguments);
-	Value getPixel(Object *pThis, std::vector<Value> arguments);
-	Value setPixel(Object *pThis, std::vector<Value> arguments);
+	Value load(std::vector<Value> arguments);
+	Value save(std::vector<Value> arguments);
+	Value getPixel(std::vector<Value> arguments);
+	Value setPixel(std::vector<Value> arguments);
 
 	long getWidth();
 	long getHeight();
